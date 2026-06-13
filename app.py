@@ -121,6 +121,22 @@ class Badge(db.Model):
     nft_hash = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class PortfolioItem(db.Model):
+    """Elementi del Focus360 AI Educational Passport: competenze, PCTO, educazione civica, badge validati."""
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.Integer, db.ForeignKey('school.id'))
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    category = db.Column(db.String(80), default='Digital Citizenship')
+    title = db.Column(db.String(180), nullable=False)
+    description = db.Column(db.Text)
+    hours = db.Column(db.Float, default=0)
+    score = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(40), default='validato')
+    validator = db.Column(db.String(160))
+    evidence_hash = db.Column(db.String(128))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    student = db.relationship('User')
+
 class BlockchainEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     school_id = db.Column(db.Integer)
@@ -243,6 +259,88 @@ def attention_index(records):
     avg_points=sum(r.points for r in records)/max(1,len(records))
     return round(max(0,min(100,(good/len(records))*75 + max(0,avg_points)*2)),1)
 
+
+def digital_wellness_score(records, surveys=None, citizenship_items=None):
+    """Calcola il Digital Wellness Score 0-100 con componenti trasparenti.
+    Non è una diagnosi: è un indicatore educativo per benessere digitale, attenzione e cittadinanza digitale.
+    """
+    surveys = surveys or []
+    citizenship_items = citizenship_items or []
+    if not records:
+        components = {
+            'focus_continuity': 0,
+            'digital_discipline': 100,
+            'consistency': 0,
+            'collaborative_focus': 0,
+            'digital_citizenship': min(100, len(citizenship_items)*12)
+        }
+    else:
+        expected = sum((r.lesson.duration_minutes if r.lesson else 60) for r in records) or 1
+        focus_minutes = sum(r.minutes_focus for r in records)
+        focus_continuity = min(100, round((focus_minutes/expected)*100, 1))
+        violations = sum(r.violations for r in records)
+        social = sum(r.opened_social for r in records)
+        exits = sum(r.exited_app for r in records)
+        digital_discipline = max(0, 100 - violations*12 - social*8 - exits*6)
+        active_days = len({r.created_at.date() for r in records})
+        consistency = min(100, active_days*12)
+        # stima del contributo al focus collettivo: punti positivi + assenza violazioni
+        positive = sum(1 for r in records if r.points > 0 and r.violations == 0)
+        collaborative_focus = round((positive/max(1,len(records)))*100, 1)
+        digital_citizenship = min(100, 20 + len(citizenship_items)*12 + sum(1 for r in records if r.tokens)*2)
+    if surveys:
+        avg_attention = sum(s.perceived_attention for s in surveys)/len(surveys)
+        avg_sleep = sum(s.sleep_quality for s in surveys)/len(surveys)
+        avg_stress = sum(s.stress_level for s in surveys)/len(surveys)
+        wellbeing_adjustment = ((avg_attention + avg_sleep + (6-avg_stress))/15)*10 - 5
+    else:
+        wellbeing_adjustment = 0
+    components = locals().get('components') or {
+        'focus_continuity': focus_continuity,
+        'digital_discipline': digital_discipline,
+        'consistency': consistency,
+        'collaborative_focus': collaborative_focus,
+        'digital_citizenship': digital_citizenship
+    }
+    score = (
+        components['focus_continuity']*0.30 +
+        components['digital_discipline']*0.25 +
+        components['consistency']*0.15 +
+        components['collaborative_focus']*0.15 +
+        components['digital_citizenship']*0.15 + wellbeing_adjustment
+    )
+    score = int(max(0, min(100, round(score))))
+    if score < 40: level='Critico'
+    elif score < 60: level='Da migliorare'
+    elif score < 80: level='Buono'
+    else: level='Eccellente'
+    return {'score': score, 'level': level, 'components': components, 'adjustment': round(wellbeing_adjustment,1)}
+
+def educational_passport(student):
+    records = FocusRecord.query.filter_by(student_id=student.id).all()
+    badges = Badge.query.filter_by(user_id=student.id).all()
+    surveys = WellbeingSurvey.query.filter_by(student_id=student.id).all()
+    items = PortfolioItem.query.filter_by(student_id=student.id).order_by(PortfolioItem.created_at.desc()).all()
+    wellness = digital_wellness_score(records, surveys, items)
+    total_focus_hours = round(sum(r.minutes_focus for r in records)/60, 1)
+    total_tokens = sum(r.tokens for r in records)
+    categories = {}
+    for it in items:
+        categories.setdefault(it.category, {'count':0,'hours':0,'score':0})
+        categories[it.category]['count'] += 1
+        categories[it.category]['hours'] += it.hours or 0
+        categories[it.category]['score'] += it.score or 0
+    payload = {
+        'student': student.email,
+        'focus_hours': total_focus_hours,
+        'tokens': total_tokens,
+        'badges': [b.name for b in badges],
+        'wellness_score': wellness['score'],
+        'items': [i.title for i in items],
+    }
+    passport_hash = sha(json.dumps(payload, sort_keys=True, ensure_ascii=False))
+    return {'student':student,'records':records,'badges':badges,'items':items,'wellness':wellness,'focus_hours':total_focus_hours,'tokens':total_tokens,'categories':categories,'passport_hash':passport_hash}
+
 def plan_enabled(school, feature):
     matrix={
         'BASE': {'qr','dashboard','csv'},
@@ -299,7 +397,9 @@ def dashboard_dirigente():
     for r in records:
         c=r.student.class_name or 'N/D'; class_stats.setdefault(c, {'points':0,'tokens':0,'violations':0,'count':0})
         class_stats[c]['points']+=r.points; class_stats[c]['tokens']+=r.tokens; class_stats[c]['violations']+=r.violations; class_stats[c]['count']+=1
-    ai_risk=focus_risk_score(records); att_index=attention_index(records); wellbeing_rows=WellbeingSurvey.query.filter_by(school_id=me.school_id).order_by(WellbeingSurvey.id.desc()).limit(10).all(); return render_template('dirigente.html', teachers=teachers, students=students, records=records, total_tokens=total_tokens, violations=violations, class_stats=class_stats, ai_risk=ai_risk, att_index=att_index, wellbeing_rows=wellbeing_rows)
+    ai_risk=focus_risk_score(records); att_index=attention_index(records); wellbeing_rows=WellbeingSurvey.query.filter_by(school_id=me.school_id).order_by(WellbeingSurvey.id.desc()).limit(10).all()
+    wellness_school=digital_wellness_score(records, wellbeing_rows, PortfolioItem.query.filter_by(school_id=me.school_id).all())
+    return render_template('dirigente.html', teachers=teachers, students=students, records=records, total_tokens=total_tokens, violations=violations, class_stats=class_stats, ai_risk=ai_risk, att_index=att_index, wellbeing_rows=wellbeing_rows, wellness_school=wellness_school)
 
 @app.route('/upload/<kind>', methods=['GET','POST'])
 @login_required(['dirigente','docente'])
@@ -407,7 +507,8 @@ def award_badges(student):
 @login_required('studente')
 def dashboard_studente():
     me=current_user(); records=FocusRecord.query.filter_by(student_id=me.id).order_by(FocusRecord.id.desc()).all(); badges=Badge.query.filter_by(user_id=me.id).all()
-    risk=focus_risk_score(records); att_index=attention_index(records); surveys=WellbeingSurvey.query.filter_by(student_id=me.id).order_by(WellbeingSurvey.id.desc()).limit(3).all(); return render_template('studente.html', records=records, badges=badges, risk=risk, att_index=att_index, surveys=surveys)
+    risk=focus_risk_score(records); att_index=attention_index(records); surveys=WellbeingSurvey.query.filter_by(student_id=me.id).order_by(WellbeingSurvey.id.desc()).limit(3).all(); passport=educational_passport(me)
+    return render_template('studente.html', records=records, badges=badges, risk=risk, att_index=att_index, surveys=surveys, passport=passport, wellness=passport['wellness'])
 
 @app.route('/genitore')
 @login_required('genitore')
@@ -417,6 +518,52 @@ def dashboard_genitore():
     records=FocusRecord.query.filter_by(student_id=child.id).order_by(FocusRecord.id.desc()).all() if child else []
     return render_template('genitore.html', child=child, records=records)
 
+
+
+@app.route('/wellness-score')
+@login_required(['dirigente','docente','studente','genitore'])
+def wellness_score_page():
+    me=current_user()
+    if me.role=='studente':
+        students=[me]
+    elif me.role=='genitore':
+        child=User.query.filter_by(email=me.email.replace('genitore.','',1)).first()
+        students=[child] if child else []
+    else:
+        students=User.query.filter_by(school_id=me.school_id, role='studente').order_by(User.class_name, User.surname).all()
+    rows=[]
+    all_records=[]
+    for st in students:
+        records=FocusRecord.query.filter_by(student_id=st.id).all()
+        surveys=WellbeingSurvey.query.filter_by(student_id=st.id).all()
+        items=PortfolioItem.query.filter_by(student_id=st.id).all()
+        w=digital_wellness_score(records, surveys, items)
+        rows.append({'student':st,'wellness':w,'tokens':sum(r.tokens for r in records),'violations':sum(r.violations for r in records),'hours':round(sum(r.minutes_focus for r in records)/60,1)})
+        all_records.extend(records)
+    school_wellness=digital_wellness_score(all_records, WellbeingSurvey.query.filter_by(school_id=me.school_id).all() if me.school_id else [], PortfolioItem.query.filter_by(school_id=me.school_id).all() if me.school_id else [])
+    return render_template('wellness_score.html', rows=rows, school_wellness=school_wellness)
+
+@app.route('/passport')
+@login_required(['studente','genitore'])
+def my_passport():
+    me=current_user()
+    student=me if me.role=='studente' else User.query.filter_by(email=me.email.replace('genitore.','',1)).first()
+    if not student:
+        flash('Studente non trovato','warning'); return redirect(url_for('index'))
+    return render_template('passport.html', data=educational_passport(student), can_add=False)
+
+@app.route('/passport/<int:student_id>', methods=['GET','POST'])
+@login_required(['dirigente','docente'])
+def student_passport(student_id):
+    me=current_user(); student=User.query.get_or_404(student_id)
+    if student.school_id != me.school_id or student.role!='studente':
+        flash('Studente non accessibile','danger'); return redirect(url_for('index'))
+    if request.method=='POST':
+        item=PortfolioItem(school_id=me.school_id, student_id=student.id, category=request.form.get('category','Digital Citizenship'), title=request.form.get('title'), description=request.form.get('description'), hours=float(request.form.get('hours') or 0), score=int(request.form.get('score') or 0), validator=f'{me.name} {me.surname}'.strip() or me.email)
+        payload={'student':student.email,'category':item.category,'title':item.title,'validator':item.validator,'hours':item.hours,'score':item.score}
+        item.evidence_hash=write_chain(me.school_id,'EDUCATIONAL_PASSPORT_ITEM',payload)
+        db.session.add(item); db.session.commit(); flash('Elemento aggiunto al Focus360 AI Educational Passport','success')
+    return render_template('passport.html', data=educational_passport(student), can_add=True)
 
 @app.route('/wellbeing', methods=['GET','POST'])
 @login_required('studente')
@@ -556,6 +703,7 @@ def ministeriale():
         'tokens':sum(r.tokens for r in records),
         'indice_attenzione':attention_index(records),
         'rischio_ai':focus_risk_score(records),
+        'digital_wellness':digital_wellness_score(records, WellbeingSurvey.query.filter_by(school_id=me.school_id).all(), PortfolioItem.query.filter_by(school_id=me.school_id).all()),
         'classi':[(k, attention_index(v), sum(x.violations for x in v), sum(x.tokens for x in v)) for k,v in by_class.items()],
         'materie':[(k, attention_index(v), sum(x.violations for x in v), round(sum(x.minutes_focus for x in v)/60,1)) for k,v in by_subject.items()]
     }

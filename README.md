@@ -1,127 +1,121 @@
 # Focus360 AI
 
-**Focus360 AI** è una webapp Flask multi-istituto per scuola secondaria pensata per migliorare concentrazione, benessere digitale e uso consapevole dello smartphone a lezione.
+Piattaforma web multi-istituto per benessere digitale, concentrazione a lezione, gamification, report scolastici e certificazione educativa.
 
-L'app non nasce come strumento punitivo, ma come piattaforma educativa: QR temporaneo del docente, registro focus, gamification, FocusToken, badge digitali, report per PTOF/Educazione civica/PCTO, dashboard per dirigente/docenti/studenti/genitori e funzioni commerciali per licenze annuali.
+## Novità della versione rigenerata
 
-## Funzioni principali
+- **Digital Wellness Score™**: indicatore 0-100 per studente, classe e istituto.
+- **Focus360 AI Educational Passport™**: portfolio digitale verificabile dello studente.
+- Registro Focus con QR temporaneo docente.
+- Gamification: punti Focus, FocusToken e badge.
+- Blockchain educativa prototipo: hash per sessioni, badge e certificazioni.
+- Dashboard SuperAdmin, Dirigente, Docente, Studente e Genitore.
+- Upload CSV docenti/studenti.
+- Report CSV e report ministeriale.
+- Smart locker / phone box, consensi genitori, piani di intervento, API device-event.
 
-- Multi-tenant: SuperAdmin, Dirigente, Docente, Studente, Genitore.
-- Creazione istituti e licenze: Base, Pro, Enterprise/PNRR.
-- Gestione fatturazione e pagamenti.
-- Upload CSV docenti e studenti.
-- Creazione automatica credenziali studenti/genitori.
-- Avvio lezione con QR Code temporaneo.
-- Registro digitale del focus.
-- Punteggi, FocusToken e badge NFT educativi simulati.
-- Blockchain interna prototipo con hash concatenati.
-- AI Risk Score e Indice di attenzione.
-- Check-in benessere digitale.
-- Smart locker / phone box / NFC badge.
-- Consensi informativi.
-- Piani educativi di intervento.
-- Report ministeriale stampabile e report CSV.
-- API prototipo per app mobile / device-event.
+## Digital Wellness Score™
 
-## Credenziali demo
+Formula trasparente:
 
-- Email: `superadmin@focus360.ai`
-- Password: `admin123`
+```python
+score = (
+  focus_continuity * 0.30 +
+  digital_discipline * 0.25 +
+  consistency * 0.15 +
+  collaborative_focus * 0.15 +
+  digital_citizenship * 0.15
+)
+```
+
+Livelli:
+
+- 0-39 Critico
+- 40-59 Da migliorare
+- 60-79 Buono
+- 80-100 Eccellente
+
+## Educational Passport™
+
+Il passaporto raccoglie:
+
+- ore Focus;
+- FocusToken;
+- badge;
+- Educazione Civica;
+- PCTO;
+- AI Literacy;
+- Cybersecurity;
+- Soft Skills;
+- hash di verifica su ledger educativo.
 
 ## Avvio locale
 
 ```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
-
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
+flask --app app init-db
 python app.py
 ```
 
-Aprire: `http://127.0.0.1:5000`
+Apri: http://127.0.0.1:5000
+
+Credenziali demo:
+
+```text
+superadmin@focus360.ai
+admin123
+```
 
 ## CSV docenti
 
 Separatore `;`:
 
-```csv
+```text
 cognome;nome;disciplina;mail;telefono;classe
-Rossi;Mario;Informatica;mario.rossi@scuola.it;3331112222;3A
+Rossi;Mario;Informatica;mario.rossi@scuola.it;3330000000;4A
 ```
 
 ## CSV studenti
 
-Separatore `;`:
-
-```csv
+```text
 cognome;nome;data di nascita;email;telefono;classe
-Bianchi;Luca;2010-05-12;luca.bianchi@studenti.it;3332221111;3A
+Bianchi;Luca;2009-05-10;luca.bianchi@scuola.it;3331111111;4A
 ```
 
 ## Deploy su Render
 
-### 1. Crea un repository GitHub
-
-Carica nella root del repository questi file:
-
-- `app.py`
-- `requirements.txt`
-- `render.yaml`
-- cartella `templates`
-- cartella `examples`
-
-### 2. Crea il Web Service
-
-Su Render:
-
-1. New +
-2. Web Service
-3. Build and deploy from a Git repository
-4. seleziona il repository GitHub
-
-### 3. Impostazioni Render
-
-Build Command:
-
-```bash
-pip install -r requirements.txt
-```
-
-Start Command:
-
-```bash
-gunicorn app:app
-```
-
-### 4. Variabili d'ambiente
+1. Crea un repository GitHub e carica tutti i file.
+2. Su Render scegli **New + → Web Service**.
+3. Collega il repository.
+4. Imposta:
 
 ```text
-SECRET_KEY=crea_una_chiave_lunga_e_sicura
+Build Command: pip install -r requirements.txt
+Start Command: gunicorn app:app
+```
+
+5. Variabili d'ambiente:
+
+```text
+SECRET_KEY=una_chiave_lunga_sicura
 DATABASE_URL=sqlite:///focus360_ai.db
 ```
 
-Per produzione reale usare PostgreSQL Render:
+Per produzione commerciale usare PostgreSQL Render:
 
-1. New + → PostgreSQL
-2. Copiare l'Internal Database URL
-3. Inserirlo come `DATABASE_URL` nel Web Service
+```text
+DATABASE_URL=<Internal Database URL del database PostgreSQL Render>
+```
 
-### 5. Nota importante su Render
+## Note commerciali
 
-SQLite va bene solo per test e demo. Per un prodotto commerciale utilizzare PostgreSQL, perché il filesystem dei servizi Render può essere effimero in base al piano e alla configurazione.
+Focus360 AI non deve essere presentata come app di controllo, ma come piattaforma per:
 
-## Stack consigliato
-
-- Frontend: Bootstrap 5, Chart.js, DataTables
-- Backend: Flask, SQLAlchemy
-- Database: SQLite demo, PostgreSQL produzione
-- AI: pandas, numpy, scikit-learn
-- Blockchain: prototipo hash-chain; in produzione Polygon o rete permissioned
-- Mobile: app Android/iOS per Digital Wellbeing, Focus Mode, Screen Time e API device-event
-
-## Nota privacy
-
-Il prototipo non blocca realmente app Android/iOS dal browser. Il blocco notifiche/social richiede app mobile nativa, autorizzazioni esplicite, informativa privacy, consenso e configurazione MDM o integrazioni di sistema.
+- benessere digitale;
+- cittadinanza digitale;
+- report PTOF/educazione civica;
+- PCTO e portfolio competenze;
+- riduzione della distrazione digitale;
+- dialogo scuola-famiglia.
