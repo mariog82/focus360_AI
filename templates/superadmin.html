@@ -1,1 +1,61 @@
-{% extends 'base.html' %}{% block content %}<div class="hero p-4 mb-4"><h1>Console aziendale {{ APP_NAME }}</h1><p>Gestione multi-istituto, licenze, fatturazione, piani Base/Pro/Enterprise e tenant scolastici.</p></div><div class="row"><div class="col-lg-5"><div class="card p-3 mb-3"><h4>Crea ambiente demo Enterprise</h4><p class="small-muted">Genera automaticamente 1 istituto demo, 1 dirigente, 5 docenti, 100 studenti, 100 genitori, lezioni, record focus, badge, blockchain, Digital Wellness Score ed Educational Passport.</p><form method="post" action="/superadmin/create-demo" class="d-flex gap-2 flex-wrap"><button class="btn btn-success">Genera scuola demo</button><button class="btn btn-outline-danger" name="reset" value="1" onclick="return confirm('Rigenerare da zero l’ambiente demo?')">Rigenera demo</button></form><hr><div class="small-muted"><strong>Credenziali demo:</strong><br>Dirigente: dirigente@demo.focus360.ai / dirigente123<br>Docente: docente@demo.focus360.ai / docente123<br>Studente: studente@demo.focus360.ai / studente123<br>Genitore: genitore@demo.focus360.ai / genitore123</div></div><div class="card p-3"><h4>Crea istituto / tenant</h4><form method="post"><input class="form-control mb-2" name="name" placeholder="Istituto"><input class="form-control mb-2" name="codice" placeholder="Codice meccanografico"><input class="form-control mb-2" name="city" placeholder="Comune"><input class="form-control mb-2" name="address" placeholder="Indirizzo"><input class="form-control mb-2" name="fiscal_code" placeholder="CF/P.IVA"><input class="form-control mb-2" name="pec" placeholder="PEC"><input class="form-control mb-2" name="billing_email" placeholder="Email fatturazione"><select class="form-select mb-2" name="plan">{% for k,p in plans.items() %}<option value="{{k}}">{{p.name}} - {{p.price}}</option>{% endfor %}</select><select class="form-select mb-2" name="payment_status"><option>in_attesa</option><option>pagato</option><option>scaduto</option></select><input class="form-control mb-2" name="ds_email" placeholder="Email dirigente"><button class="btn btn-primary">Crea tenant</button></form></div></div><div class="col-lg-7"><div class="card p-3"><h4>Istituti</h4><table class="table"><tr><th>Istituto</th><th>Piano</th><th>Pagamento</th><th>Licenza</th></tr>{% for s in schools %}<tr><td>{{s.name}}<br><span class="small-muted">{{s.city}}</span></td><td><span class="brand-badge">{{s.plan}}</span></td><td>{{s.payment_status}}</td><td>{{s.license_end}}</td></tr>{% endfor %}</table></div></div></div>{% endblock %}
+{% extends 'base.html' %}{% block content %}
+<div class="hero p-4 mb-4"><h1>Console aziendale {{ APP_NAME }}</h1><p>Gestione multi-istituto, licenze, fatturazione, piani Base/Pro/Enterprise, scadenze, credenziali e tenant scolastici.</p></div>
+<div class="row">
+  <div class="col-lg-5">
+    <div class="card p-3 mb-3">
+      <h4>Crea ambiente demo Enterprise</h4>
+      <p class="small-muted">Genera automaticamente istituto demo, dirigente, docenti, studenti, genitori, lezioni, badge, blockchain, Wellness Score ed Educational Passport.</p>
+      <form method="post" action="/superadmin/create-demo" class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-success">Genera scuola demo</button>
+        <button class="btn btn-outline-danger" name="reset" value="1" onclick="return confirm('Rigenerare da zero l’ambiente demo?')">Rigenera demo</button>
+      </form>
+      <hr>
+      <div class="small-muted"><strong>Credenziali demo:</strong><br>Dirigente: dirigente@demo.focus360.ai / dirigente123<br>Docente: docente@demo.focus360.ai / docente123<br>Studente: studente@demo.focus360.ai / studente123<br>Genitore: genitore@demo.focus360.ai / genitore123</div>
+    </div>
+    <div class="card p-3">
+      <h4>Crea istituto / tenant</h4>
+      <form method="post">
+        <input class="form-control mb-2" name="name" placeholder="Istituto" required>
+        <input class="form-control mb-2" name="codice" placeholder="Codice meccanografico">
+        <input class="form-control mb-2" name="city" placeholder="Comune">
+        <input class="form-control mb-2" name="address" placeholder="Indirizzo">
+        <input class="form-control mb-2" name="fiscal_code" placeholder="CF/P.IVA">
+        <input class="form-control mb-2" name="pec" placeholder="PEC">
+        <input class="form-control mb-2" name="billing_email" placeholder="Email fatturazione">
+        <select class="form-select mb-2" name="plan">{% for k,p in plans.items() %}<option value="{{k}}">{{p.name}} - {{p.price}}</option>{% endfor %}</select>
+        <select class="form-select mb-2" name="payment_status"><option>in_attesa</option><option>pagato</option><option>scaduto</option></select>
+        <input class="form-control mb-2" type="date" name="license_end" title="Scadenza licenza">
+        <input class="form-control mb-2" name="ds_email" placeholder="Email dirigente" required>
+        <button class="btn btn-primary">Crea tenant</button>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card p-3"><h4>Istituti</h4>
+      <div class="table-responsive"><table class="table align-middle"><tr><th>Istituto</th><th>Licenza</th><th>Stato</th><th>Azioni</th></tr>
+      {% for s in schools %}
+      <tr>
+        <td><strong>{{s.name}}</strong><br><span class="small-muted">{{s.city}} · {{s.codice_meccanografico or ''}}</span><br><span class="brand-badge">{{s.plan}}</span></td>
+        <td>{{s.license_end}}<br><span class="small-muted">Pagamento: {{s.payment_status}}</span></td>
+        <td>{% if s.active %}<span class="badge bg-success">attivo</span>{% else %}<span class="badge bg-secondary">disattivato</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/superadmin/school/{{s.id}}/update" class="border rounded p-2 mb-2">
+            <div class="row g-1">
+              <div class="col-6"><select class="form-select form-select-sm" name="plan">{% for k,p in plans.items() %}<option value="{{k}}" {% if s.plan==k %}selected{% endif %}>{{k}}</option>{% endfor %}</select></div>
+              <div class="col-6"><select class="form-select form-select-sm" name="payment_status"><option {% if s.payment_status=='in_attesa' %}selected{% endif %}>in_attesa</option><option {% if s.payment_status=='pagato' %}selected{% endif %}>pagato</option><option {% if s.payment_status=='scaduto' %}selected{% endif %}>scaduto</option></select></div>
+              <div class="col-12"><input class="form-control form-control-sm" type="date" name="license_end" value="{{s.license_end}}"></div>
+              <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="active" value="1" {% if s.active %}checked{% endif %}><label class="form-check-label small">Istituto attivo</label></div>
+              <div class="col-12"><button class="btn btn-sm btn-primary w-100">Salva piano/scadenza/stato</button></div>
+            </div>
+          </form>
+          <a class="btn btn-sm btn-outline-success mb-1" href="/credentials/export?school_id={{s.id}}">Esporta credenziali</a>
+          <form method="post" action="/superadmin/school/{{s.id}}/toggle" class="d-inline"><button class="btn btn-sm btn-outline-warning">{% if s.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>
+          <form method="post" action="/superadmin/school/{{s.id}}/delete" class="d-inline" onsubmit="return confirm('Eliminare definitivamente questo istituto dal prototipo?')"><button class="btn btn-sm btn-outline-danger">Elimina</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+      </table></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
