@@ -147,3 +147,65 @@ Credenziali demo generate:
 Il pulsante crea automaticamente un tenant Enterprise con classi, docenti, studenti, genitori, lezioni, record focus, Digital Wellness Score, Educational Passport, badge NFT educativi, consensi, smart locker, pagamento demo e report ministeriali.
 
 Per Render è incluso `runtime.txt` con Python 3.11.9 per evitare problemi di compilazione delle dipendenze native.
+
+## Novità Focus360 AI Enterprise v3
+
+### Flusso QR studente completo
+1. Il docente avvia la lezione e proietta il QR temporaneo.
+2. Lo studente apre Focus360 AI, effettua il login e inquadra il QR.
+3. Si apre una pagina di conferma con materia, classe e durata.
+4. Lo studente preme **Attiva Focus**.
+5. Il sistema registra l'evento `focus_started` e apre la schermata timer.
+6. A fine lezione lo studente chiude la sessione: vengono calcolati punti, FocusToken, eventuali violazioni e hash blockchain.
+
+### Download Educational Passport PDF
+Nella pagina **Educational Passport** è presente il pulsante **Scarica Passport PDF**. Il PDF è generato senza dipendenze esterne, quindi funziona anche su Render senza installare pacchetti pesanti.
+
+### Phone Box Smart prototipo
+La sezione **Smart Locker** consente di simulare deposito, ritiro e manutenzione di una Phone Box Smart. Ogni deposito genera un `DeviceEvent` positivo, utile come evidenza per Focus, Wellness Score ed Educational Passport.
+
+Endpoint hardware prototipo:
+
+```http
+POST /api/v1/phonebox/event
+Content-Type: application/json
+```
+
+Payload:
+
+```json
+{
+  "api_key": "demo-phonebox-key",
+  "box_code": "3AINF-BOX-01",
+  "event": "deposit",
+  "student_email": "studente@demo.focus360.ai"
+}
+```
+
+Eventi supportati: `deposit`, `withdraw`, `heartbeat`, `maintenance`.
+
+### Variabili ambiente aggiuntive
+
+```text
+PHONEBOX_API_KEY=demo-phonebox-key
+```
+
+### Implementazione reale Phone Box Smart
+Architettura consigliata:
+- microcontrollore ESP32 o Raspberry Pi Zero 2 W;
+- lettore NFC/RFID PN532 o RC522;
+- sensore presenza vano: microswitch, reed switch o sensore IR;
+- LED RGB per stato libero/occupato/manutenzione;
+- buzzer per conferma deposito;
+- serratura elettromagnetica o servo lock, opzionale;
+- connessione WiFi scolastica o rete IoT/VLAN dedicata;
+- chiamata HTTPS all'endpoint `/api/v1/phonebox/event`.
+
+Flusso reale:
+1. Lo studente appoggia badge NFC.
+2. Il box legge UID o QR studente.
+3. Lo sportello si apre.
+4. Il sensore conferma deposito telefono.
+5. Il dispositivo invia evento `deposit` alla webapp.
+6. La dashboard docente vede il telefono consegnato.
+7. A fine lezione lo studente ritira il telefono e viene inviato `withdraw`.

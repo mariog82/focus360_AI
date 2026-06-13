@@ -340,6 +340,58 @@ def educational_passport(student):
     passport_hash = sha(json.dumps(payload, sort_keys=True, ensure_ascii=False))
     return {'student':student,'records':records,'badges':badges,'items':items,'wellness':wellness,'focus_hours':total_focus_hours,'tokens':total_tokens,'categories':categories,'passport_hash':passport_hash}
 
+
+def pdf_escape(txt):
+    return str(txt).replace('\\','\\\\').replace('(','\\(').replace(')','\\)')
+
+def simple_passport_pdf(data):
+    """Genera un PDF minimale senza dipendenze esterne, adatto a Render."""
+    st=data['student']
+    lines=[
+        'FOCUS360 AI - EDUCATIONAL PASSPORT',
+        f"Studente: {st.surname} {st.name}",
+        f"Classe: {st.class_name or ''}",
+        f"Email: {st.email}",
+        f"Digital Wellness Score: {data['wellness']['score']}/100 - {data['wellness']['level']}",
+        f"Ore Focus certificate: {data['focus_hours']}",
+        f"FocusToken: {data['tokens']}",
+        f"Hash Passport: {data['passport_hash']}",
+        '', 'BADGE:'
+    ]
+    lines += [f"- {b.name}" for b in data['badges']] or ['- Nessun badge']
+    lines += ['', 'COMPETENZE E PORTFOLIO:']
+    for it in data['items'][:30]:
+        lines.append(f"- {it.category}: {it.title} | ore {it.hours} | score {it.score} | validatore {it.validator or ''}")
+        if it.evidence_hash:
+            lines.append(f"  hash evidenza: {it.evidence_hash[:32]}...")
+    lines += ['', 'Documento dimostrativo generato da Focus360 AI Enterprise.']
+    content=['BT','/F1 12 Tf','50 790 Td']
+    first=True
+    for line in lines:
+        if first:
+            first=False
+        else:
+            content.append('0 -18 Td')
+        content.append(f"({pdf_escape(line[:95])}) Tj")
+    content.append('ET')
+    stream='\n'.join(content).encode('latin-1','replace')
+    objects=[]
+    objects.append(b'1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n')
+    objects.append(b'2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n')
+    objects.append(b'3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n')
+    objects.append(b'4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n')
+    objects.append(f'5 0 obj << /Length {len(stream)} >> stream\n'.encode()+stream+b'\nendstream endobj\n')
+    pdf=b'%PDF-1.4\n'
+    offsets=[0]
+    for obj in objects:
+        offsets.append(len(pdf)); pdf+=obj
+    xref=len(pdf)
+    pdf+=f'xref\n0 {len(objects)+1}\n0000000000 65535 f \n'.encode()
+    for off in offsets[1:]:
+        pdf+=f'{off:010d} 00000 n \n'.encode()
+    pdf+=f'trailer << /Size {len(objects)+1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF'.encode()
+    return pdf
+
 def plan_enabled(school, feature):
     matrix={
         'BASE': {'qr','dashboard','csv'},
@@ -458,7 +510,7 @@ def qr_png(lesson_id):
     buf=io.BytesIO(); img.save(buf, format='PNG'); buf.seek(0)
     return send_file(buf, mimetype='image/png')
 
-@app.route('/scan/<int:lesson_id>/<token>')
+@app.route('/scan/<int:lesson_id>/<token>', methods=['GET','POST'])
 @login_required(['studente'])
 def scan_focus(lesson_id, token):
     me=current_user(); l=Lesson.query.get_or_404(lesson_id)
@@ -467,11 +519,15 @@ def scan_focus(lesson_id, token):
     if me.class_name != l.class_name:
         flash('QR non associato alla tua classe','danger'); return redirect(url_for('dashboard_studente'))
     r=FocusRecord.query.filter_by(lesson_id=l.id, student_id=me.id).first()
-    if not r:
-        r=FocusRecord(lesson_id=l.id, student_id=me.id, minutes_focus=0)
-        db.session.add(r); db.session.commit()
-    flash('Modalità Focus attivata. In prototipo il blocco app è simulato; su mobile richiede integrazione nativa Android/iOS.','success')
-    return redirect(url_for('focus_session', record_id=r.id))
+    if request.method == 'POST':
+        if not r:
+            r=FocusRecord(lesson_id=l.id, student_id=me.id, minutes_focus=0)
+            db.session.add(r); db.session.flush()
+        db.session.add(DeviceEvent(school_id=me.school_id, student_id=me.id, lesson_id=l.id, event_type='focus_started', value='QR confermato dallo studente', risk_weight=0, source='qr_web'))
+        db.session.commit()
+        flash('Modalità Focus attivata. In prototipo il blocco app è simulato; su mobile richiede integrazione nativa Android/iOS.','success')
+        return redirect(url_for('focus_session', record_id=r.id))
+    return render_template('scan_focus.html', l=l, token=token, existing_record=r)
 
 @app.route('/focus/<int:record_id>', methods=['GET','POST'])
 @login_required('studente')
@@ -551,6 +607,25 @@ def my_passport():
         flash('Studente non trovato','warning'); return redirect(url_for('index'))
     return render_template('passport.html', data=educational_passport(student), can_add=False)
 
+@app.route('/passport/download')
+@login_required(['studente','genitore'])
+def my_passport_download():
+    me=current_user()
+    student=me if me.role=='studente' else User.query.filter_by(email=me.email.replace('genitore.','',1)).first()
+    if not student:
+        flash('Studente non trovato','warning'); return redirect(url_for('index'))
+    pdf=simple_passport_pdf(educational_passport(student))
+    return send_file(io.BytesIO(pdf), as_attachment=True, download_name=f'Focus360_Educational_Passport_{student.surname}_{student.name}.pdf', mimetype='application/pdf')
+
+@app.route('/passport/<int:student_id>/download')
+@login_required(['dirigente','docente'])
+def student_passport_download(student_id):
+    me=current_user(); student=User.query.get_or_404(student_id)
+    if student.school_id != me.school_id or student.role!='studente':
+        flash('Studente non accessibile','danger'); return redirect(url_for('index'))
+    pdf=simple_passport_pdf(educational_passport(student))
+    return send_file(io.BytesIO(pdf), as_attachment=True, download_name=f'Focus360_Educational_Passport_{student.surname}_{student.name}.pdf', mimetype='application/pdf')
+
 @app.route('/passport/<int:student_id>', methods=['GET','POST'])
 @login_required(['dirigente','docente'])
 def student_passport(student_id):
@@ -599,7 +674,55 @@ def lockers():
         box=SmartLocker(school_id=me.school_id, class_name=request.form.get('class_name'), box_code=request.form.get('box_code'), status=request.form.get('status','libero'))
         db.session.add(box); db.session.commit(); flash('Phone box / locker registrato','success')
     boxes=SmartLocker.query.filter_by(school_id=me.school_id).order_by(SmartLocker.class_name, SmartLocker.box_code).all()
-    return render_template('lockers.html', boxes=boxes)
+    students=User.query.filter_by(school_id=me.school_id, role='studente').order_by(User.class_name, User.surname).all()
+    return render_template('lockers.html', boxes=boxes, students=students)
+
+@app.route('/lockers/<int:box_id>/event', methods=['POST'])
+@login_required(['dirigente','docente'])
+def locker_event(box_id):
+    me=current_user(); box=SmartLocker.query.get_or_404(box_id)
+    if box.school_id != me.school_id:
+        flash('Box non accessibile','danger'); return redirect(url_for('lockers'))
+    action=request.form.get('action','deposit')
+    student_id=int(request.form.get('student_id') or 0) if request.form.get('student_id') else None
+    student=User.query.get(student_id) if student_id else None
+    if action == 'deposit' and student:
+        box.status='occupato'; box.last_student_id=student.id; box.updated_at=datetime.utcnow()
+        db.session.add(DeviceEvent(school_id=me.school_id, student_id=student.id, event_type='phonebox_deposit', value=box.box_code, risk_weight=-2, source='smart_locker_demo'))
+        flash(f'Telefono depositato nella Phone Box {box.box_code} per {student.surname} {student.name}. Bonus focus attivabile.', 'success')
+    elif action == 'withdraw':
+        sid=box.last_student_id
+        box.status='libero'; box.last_student_id=None; box.updated_at=datetime.utcnow()
+        if sid:
+            db.session.add(DeviceEvent(school_id=me.school_id, student_id=sid, event_type='phonebox_withdraw', value=box.box_code, risk_weight=0, source='smart_locker_demo'))
+        flash(f'Phone Box {box.box_code} liberata.', 'info')
+    elif action == 'maintenance':
+        box.status='manutenzione'; box.updated_at=datetime.utcnow(); flash(f'Phone Box {box.box_code} in manutenzione.', 'warning')
+    db.session.commit(); return redirect(url_for('lockers'))
+
+@app.route('/api/v1/phonebox/event', methods=['POST'])
+def api_phonebox_event():
+    """Endpoint prototipo per ESP32/Raspberry: JSON con api_key, box_code, event, student_email."""
+    data=request.get_json(silent=True) or {}
+    api_key=os.environ.get('PHONEBOX_API_KEY','demo-phonebox-key')
+    if data.get('api_key') != api_key:
+        return jsonify({'ok':False,'error':'api_key non valida'}), 401
+    box=SmartLocker.query.filter_by(box_code=data.get('box_code')).first()
+    if not box:
+        return jsonify({'ok':False,'error':'box non trovato'}), 404
+    student=User.query.filter_by(email=(data.get('student_email') or '').lower()).first() if data.get('student_email') else None
+    event=data.get('event','heartbeat')
+    if event == 'deposit' and student:
+        box.status='occupato'; box.last_student_id=student.id
+        db.session.add(DeviceEvent(school_id=box.school_id, student_id=student.id, event_type='phonebox_deposit', value=box.box_code, risk_weight=-2, source='phonebox_hardware'))
+    elif event == 'withdraw':
+        sid=box.last_student_id
+        box.status='libero'; box.last_student_id=None
+        if sid: db.session.add(DeviceEvent(school_id=box.school_id, student_id=sid, event_type='phonebox_withdraw', value=box.box_code, source='phonebox_hardware'))
+    elif event == 'maintenance':
+        box.status='manutenzione'
+    box.updated_at=datetime.utcnow(); db.session.commit()
+    return jsonify({'ok':True,'box':box.box_code,'status':box.status})
 
 @app.route('/blockchain')
 @login_required(['superadmin','dirigente'])
