@@ -209,3 +209,29 @@ Flusso reale:
 5. Il dispositivo invia evento `deposit` alla webapp.
 6. La dashboard docente vede il telefono consegnato.
 7. A fine lezione lo studente ritira il telefono e viene inviato `withdraw`.
+
+
+## Novità Enterprise - Gestione credenziali e licenze
+
+### Credenziali utenti
+- Username: sempre l'email dell'utente.
+- Password: generata automaticamente in modo casuale.
+- Le password temporanee sono mostrate nell'esito dell'importazione e possono essere esportate in CSV dal Dirigente o dal SuperAdmin.
+- Al primo accesso l'utente viene obbligato a cambiare password (`must_change_password`).
+- In produzione non conservare password in chiaro: questa versione prototipo mantiene la password temporanea solo per demo/esportazione iniziale.
+
+### CSV studenti aggiornato
+```csv
+cognome;nome;data di nascita;email;telefono;classe;email_genitore
+```
+Se `email_genitore` manca, il sistema crea un account tecnico del tipo `genitore.emailstudente`.
+
+### SuperAdmin
+Il SuperAdmin può ora:
+- modificare piano commerciale, stato pagamento e scadenza licenza;
+- disattivare o riattivare un istituto;
+- eliminare un istituto dal prototipo;
+- esportare le credenziali iniziali degli utenti del tenant.
+
+### Deploy su Render dopo aggiornamento
+Se usi un database già esistente, la webapp esegue una piccola migrazione prototipo per aggiungere `temporary_password` e `must_change_password`. Se il deploy dà problemi, usare **Clear build cache & deploy** e, per SQLite, eliminare il vecchio file database solo in ambiente demo.

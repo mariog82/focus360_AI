@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash, check_password_hash
 import qrcode
 from PIL import Image
@@ -58,6 +59,8 @@ class User(db.Model):
     class_name = db.Column(db.String(60))
     birthdate = db.Column(db.String(20))
     active = db.Column(db.Boolean, default=True)
+    temporary_password = db.Column(db.String(80))  # solo prototipo/demo: in produzione mostrarla una sola volta e poi cancellarla
+    must_change_password = db.Column(db.Boolean, default=True)
     school = db.relationship('School', backref='users')
 
 class Lesson(db.Model):
@@ -418,25 +421,114 @@ def login():
     if request.method=='POST':
         u=User.query.filter_by(email=request.form['email'].strip().lower()).first()
         if u and u.active and check_password_hash(u.password_hash, request.form['password']):
-            session['uid']=u.id; return redirect(url_for('index'))
+            if u.school_id and u.school and not u.school.active:
+                flash('Istituto disattivato: contattare la segreteria o il fornitore Focus360 AI.','danger')
+                return render_template('login.html')
+            session['uid']=u.id
+            if getattr(u, 'must_change_password', False):
+                return redirect(url_for('change_password'))
+            return redirect(url_for('index'))
         flash('Credenziali non valide','danger')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout(): session.clear(); return redirect(url_for('login'))
 
+@app.route('/change-password', methods=['GET','POST'])
+@login_required()
+def change_password():
+    me=current_user()
+    if request.method=='POST':
+        new_pwd=request.form.get('new_password','')
+        confirm=request.form.get('confirm_password','')
+        if len(new_pwd) < 8:
+            flash('La password deve contenere almeno 8 caratteri','danger')
+        elif new_pwd != confirm:
+            flash('Le password non coincidono','danger')
+        else:
+            me.password_hash=generate_password_hash(new_pwd)
+            me.must_change_password=False
+            me.temporary_password=''
+            db.session.commit()
+            flash('Password aggiornata correttamente','success')
+            return redirect(url_for('index'))
+    return render_template('change_password.html')
+
 @app.route('/superadmin', methods=['GET','POST'])
 @login_required('superadmin')
 def dashboard_superadmin():
     if request.method=='POST':
-        school=School(name=request.form['name'], codice_meccanografico=request.form.get('codice'), city=request.form.get('city'), address=request.form.get('address'), fiscal_code=request.form.get('fiscal_code'), pec=request.form.get('pec'), billing_email=request.form.get('billing_email'), plan=request.form.get('plan','BASE'), payment_status=request.form.get('payment_status','in_attesa'), payment_method=request.form.get('payment_method','bonifico'))
+        lic_end = request.form.get('license_end')
+        license_end = datetime.strptime(lic_end, '%Y-%m-%d').date() if lic_end else date.today()+timedelta(days=365)
+        school=School(name=request.form['name'], codice_meccanografico=request.form.get('codice'), city=request.form.get('city'), address=request.form.get('address'), fiscal_code=request.form.get('fiscal_code'), pec=request.form.get('pec'), billing_email=request.form.get('billing_email'), plan=request.form.get('plan','BASE'), payment_status=request.form.get('payment_status','in_attesa'), payment_method=request.form.get('payment_method','bonifico'), license_end=license_end)
         db.session.add(school); db.session.commit()
         pwd=random_password()
-        dirigente=User(school_id=school.id, role='dirigente', surname=request.form.get('ds_surname','Dirigente'), name=request.form.get('ds_name','Scolastico'), email=request.form['ds_email'].lower(), password_hash=generate_password_hash(pwd))
+        dirigente=User(school_id=school.id, role='dirigente', surname=request.form.get('ds_surname','Dirigente'), name=request.form.get('ds_name','Scolastico'), email=request.form['ds_email'].lower(), password_hash=generate_password_hash(pwd), temporary_password=pwd, must_change_password=True)
         db.session.add(dirigente); db.session.commit()
         flash(f'Istituto creato. Credenziali dirigente: {dirigente.email} / {pwd}','success')
     schools=School.query.order_by(School.id.desc()).all()
     return render_template('superadmin.html', schools=schools, payments=PaymentRecord.query.order_by(PaymentRecord.id.desc()).limit(10).all())
+
+@app.route('/superadmin/school/<int:school_id>/update', methods=['POST'])
+@login_required('superadmin')
+def superadmin_update_school(school_id):
+    school=School.query.get_or_404(school_id)
+    school.plan=request.form.get('plan', school.plan)
+    school.payment_status=request.form.get('payment_status', school.payment_status)
+    school.payment_method=request.form.get('payment_method', school.payment_method)
+    school.active = bool(request.form.get('active'))
+    lic_end=request.form.get('license_end')
+    if lic_end:
+        try:
+            school.license_end=datetime.strptime(lic_end, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Formato scadenza non valido','danger')
+            return redirect(url_for('dashboard_superadmin'))
+    school.notes=request.form.get('notes', school.notes)
+    db.session.commit()
+    flash('Istituto aggiornato: piano, pagamento, stato e scadenza licenza modificati.','success')
+    return redirect(url_for('dashboard_superadmin'))
+
+@app.route('/superadmin/school/<int:school_id>/toggle', methods=['POST'])
+@login_required('superadmin')
+def superadmin_toggle_school(school_id):
+    school=School.query.get_or_404(school_id)
+    school.active = not school.active
+    User.query.filter_by(school_id=school.id).update({'active': school.active}, synchronize_session=False)
+    db.session.commit()
+    flash(('Istituto riattivato.' if school.active else 'Istituto disattivato. Anche gli utenti del tenant sono stati disattivati.'),'warning')
+    return redirect(url_for('dashboard_superadmin'))
+
+@app.route('/superadmin/school/<int:school_id>/delete', methods=['POST'])
+@login_required('superadmin')
+def superadmin_delete_school(school_id):
+    school=School.query.get_or_404(school_id)
+    sid=school.id
+    # Eliminazione fisica per prototipo. In produzione preferire soft delete e conservazione fiscale/log.
+    for model in [InterventionPlan, DeviceEvent, ParentConsent, PaymentRecord, PortfolioItem, Badge, SmartLocker, WellbeingSurvey, FocusRecord, Lesson, BlockchainEvent, User]:
+        if hasattr(model, 'school_id'):
+            model.query.filter_by(school_id=sid).delete(synchronize_session=False)
+    db.session.delete(school)
+    db.session.commit()
+    flash('Istituto eliminato dal prototipo.','danger')
+    return redirect(url_for('dashboard_superadmin'))
+
+@app.route('/credentials/export')
+@login_required(['superadmin','dirigente'])
+def export_credentials():
+    me=current_user()
+    school_id=request.args.get('school_id', type=int) if me.role=='superadmin' else me.school_id
+    if not school_id:
+        flash('Seleziona un istituto per esportare le credenziali','danger')
+        return redirect(url_for('dashboard_superadmin'))
+    users=User.query.filter(User.school_id==school_id, User.role.in_(['dirigente','docente','studente','genitore'])).order_by(User.role, User.class_name, User.surname).all()
+    out=io.StringIO()
+    w=csv.writer(out, delimiter=';')
+    w.writerow(['ruolo','cognome','nome','email_username','password_temporanea','classe','deve_cambiare_password','attivo'])
+    for u in users:
+        w.writerow([u.role,u.surname or '',u.name or '',u.email,u.temporary_password or '',u.class_name or '', 'SI' if u.must_change_password else 'NO', 'SI' if u.active else 'NO'])
+    data=io.BytesIO(out.getvalue().encode('utf-8-sig'))
+    return send_file(data, mimetype='text/csv', as_attachment=True, download_name=f'focus360_credenziali_istituto_{school_id}.csv')
 
 @app.route('/dirigente')
 @login_required('dirigente')
@@ -468,13 +560,15 @@ def upload(kind):
             if not email or User.query.filter_by(email=email).first(): continue
             pwd=random_password()
             role='docente' if kind=='docenti' else 'studente'
-            u=User(school_id=me.school_id, role=role, surname=row.get('cognome',''), name=row.get('nome',''), email=email, phone=row.get('telefono',''), password_hash=generate_password_hash(pwd), discipline=row.get('disciplina',''), class_name=row.get('classe',''), birthdate=row.get('data di nascita',''))
+            u=User(school_id=me.school_id, role=role, surname=row.get('cognome',''), name=row.get('nome',''), email=email, phone=row.get('telefono',''), password_hash=generate_password_hash(pwd), temporary_password=pwd, must_change_password=True, discipline=row.get('disciplina',''), class_name=row.get('classe',''), birthdate=row.get('data di nascita',''))
             db.session.add(u); db.session.flush(); created.append((u.email,pwd,u.role,u.class_name))
             if role=='studente':
-                p_email=f"genitore.{u.email}"
+                parent_csv=(row.get('email_genitore') or row.get('mail_genitore') or row.get('genitore_email') or '').strip().lower()
+                p_email=parent_csv or f"genitore.{u.email}"
                 if not User.query.filter_by(email=p_email).first():
-                    g=User(school_id=me.school_id, role='genitore', surname='Genitore', name=f'{u.name} {u.surname}', email=p_email, password_hash=generate_password_hash(pwd), class_name=u.class_name)
-                    db.session.add(g)
+                    gpwd=random_password()
+                    g=User(school_id=me.school_id, role='genitore', surname='Genitore', name=f'{u.name} {u.surname}', email=p_email, password_hash=generate_password_hash(gpwd), temporary_password=gpwd, must_change_password=True, class_name=u.class_name)
+                    db.session.add(g); created.append((g.email,gpwd,g.role,g.class_name))
         db.session.commit()
         return render_template('upload_result.html', created=created)
     return render_template('upload.html', kind=kind)
@@ -868,13 +962,15 @@ DEMO_USERS = {
 def upsert_user(email, password, **kwargs):
     u = User.query.filter_by(email=email).first()
     if not u:
-        u = User(email=email, password_hash=generate_password_hash(password), **kwargs)
+        u = User(email=email, password_hash=generate_password_hash(password), temporary_password=password, must_change_password=True, **kwargs)
         db.session.add(u)
         db.session.flush()
     else:
         for k, v in kwargs.items():
             setattr(u, k, v)
         u.password_hash = generate_password_hash(password)
+        u.temporary_password = password
+        u.must_change_password = True
         u.active = True
     return u
 
@@ -1023,10 +1119,32 @@ def create_demo_route():
 def init_db_cmd():
     init_db(); print('Database inizializzato')
 
+def ensure_runtime_columns():
+    # Piccola migrazione prototipo per database SQLite/PostgreSQL già esistenti.
+    engine_name = db.engine.url.get_backend_name()
+    stmts = []
+    if engine_name.startswith('sqlite'):
+        stmts = [
+            "ALTER TABLE user ADD COLUMN temporary_password VARCHAR(80)",
+            "ALTER TABLE user ADD COLUMN must_change_password BOOLEAN DEFAULT 1"
+        ]
+    else:
+        stmts = [
+            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS temporary_password VARCHAR(80)',
+            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT TRUE'
+        ]
+    for stmt in stmts:
+        try:
+            db.session.execute(text(stmt))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
 def init_db():
     db.create_all()
+    ensure_runtime_columns()
     if not User.query.filter_by(email='superadmin@focus360.ai').first():
-        su=User(role='superadmin', surname='Super', name='Admin', email='superadmin@focus360.ai', password_hash=generate_password_hash('admin123'))
+        su=User(role='superadmin', surname='Super', name='Admin', email='superadmin@focus360.ai', password_hash=generate_password_hash('admin123'), temporary_password='', must_change_password=False)
         db.session.add(su)
     db.session.commit()
 
