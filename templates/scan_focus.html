@@ -1,0 +1,11 @@
+{% extends 'base.html' %}{% block content %}
+<div class="hero p-4 mb-4"><h1>Partecipa alla lezione Focus</h1><p>Hai scansionato il QR temporaneo generato dal docente.</p></div>
+<div class="row g-3"><div class="col-md-7"><div class="card p-4">
+<h3>{{l.subject}} · {{l.class_name}}</h3>
+<p><b>Durata:</b> {{l.duration_minutes}} minuti</p>
+<p><b>Scadenza QR:</b> {{l.qr_expires_at}}</p>
+<div class="alert alert-info">Dopo aver premuto <b>Attiva Focus</b>, resta nella schermata focus o deposita lo smartphone nella Phone Box Smart. In questa versione web il blocco notifiche/social è simulato; in produzione avviene tramite app mobile, MDM, Android/iOS Focus Mode o WiFi scolastico.</div>
+{% if existing_record %}<div class="alert alert-warning">Risulti già registrato a questa sessione. Puoi riaprire la modalità focus.</div>{% endif %}
+<form method="post"><button class="btn btn-success btn-lg">Attiva Focus</button> <a href="/studente" class="btn btn-outline-secondary">Annulla</a></form>
+</div></div><div class="col-md-5"><div class="card p-4"><h4>Cosa deve fare lo studente?</h4><ol><li>Scansiona il QR proiettato dal docente.</li><li>Verifica materia e classe.</li><li>Premi <b>Attiva Focus</b>.</li><li>Deposita il telefono nella Phone Box oppure lascia attiva la schermata focus.</li><li>A fine lezione chiudi la sessione e ottieni punti/token.</li></ol></div></div></div>
+{% endblock %}
