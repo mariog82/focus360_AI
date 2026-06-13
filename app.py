@@ -12,7 +12,7 @@ import pandas as pd
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-change-me')
-raw_db = os.environ.get('DATABASE_URL', 'sqlite:///focus_scuola.db')
+raw_db = os.environ.get('DATABASE_URL', 'sqlite:///focus360_ai.db')
 if raw_db.startswith('postgres://'):
     raw_db = raw_db.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = raw_db
@@ -131,6 +131,54 @@ class BlockchainEvent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class PaymentRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.Integer, db.ForeignKey('school.id'))
+    invoice_number = db.Column(db.String(40))
+    amount = db.Column(db.Float, default=0)
+    method = db.Column(db.String(60), default='bonifico')
+    status = db.Column(db.String(30), default='in_attesa')
+    due_date = db.Column(db.Date)
+    paid_at = db.Column(db.DateTime)
+    note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    school = db.relationship('School')
+
+class ParentConsent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.Integer, db.ForeignKey('school.id'))
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    consent_focus = db.Column(db.Boolean, default=True)
+    consent_analytics = db.Column(db.Boolean, default=True)
+    consent_badge = db.Column(db.Boolean, default=True)
+    signed_by = db.Column(db.String(160))
+    signed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    student = db.relationship('User')
+
+class DeviceEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.Integer)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=True)
+    event_type = db.Column(db.String(80))
+    value = db.Column(db.String(160))
+    risk_weight = db.Column(db.Integer, default=0)
+    source = db.Column(db.String(80), default='web_prototype')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    student = db.relationship('User')
+    lesson = db.relationship('Lesson')
+
+class InterventionPlan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    school_id = db.Column(db.Integer)
+    class_name = db.Column(db.String(60))
+    title = db.Column(db.String(180))
+    owner = db.Column(db.String(120))
+    status = db.Column(db.String(40), default='aperto')
+    action = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 def current_user():
     uid = session.get('uid')
     return User.query.get(uid) if uid else None
@@ -239,7 +287,7 @@ def dashboard_superadmin():
         db.session.add(dirigente); db.session.commit()
         flash(f'Istituto creato. Credenziali dirigente: {dirigente.email} / {pwd}','success')
     schools=School.query.order_by(School.id.desc()).all()
-    return render_template('superadmin.html', schools=schools)
+    return render_template('superadmin.html', schools=schools, payments=PaymentRecord.query.order_by(PaymentRecord.id.desc()).limit(10).all())
 
 @app.route('/dirigente')
 @login_required('dirigente')
@@ -450,17 +498,102 @@ def api_analytics():
         data[key]['points']+=r.points; data[key]['violations']+=r.violations; data[key]['minutes']+=r.minutes_focus; data[key]['n']+=1
     return jsonify(data)
 
+
+@app.route('/payments', methods=['GET','POST'])
+@login_required('superadmin')
+def payments():
+    schools=School.query.order_by(School.name).all()
+    if request.method=='POST':
+        rec=PaymentRecord(school_id=int(request.form['school_id']), invoice_number=request.form.get('invoice_number'), amount=float(request.form.get('amount') or 0), method=request.form.get('method','bonifico'), status=request.form.get('status','in_attesa'), due_date=datetime.strptime(request.form.get('due_date'), '%Y-%m-%d').date() if request.form.get('due_date') else None, note=request.form.get('note',''))
+        db.session.add(rec); db.session.commit(); flash('Pagamento/fattura registrato','success')
+        return redirect(url_for('payments'))
+    records=PaymentRecord.query.order_by(PaymentRecord.id.desc()).all()
+    return render_template('payments.html', schools=schools, records=records)
+
+@app.route('/consensi', methods=['GET','POST'])
+@login_required(['dirigente','genitore'])
+def consensi():
+    me=current_user()
+    students=[]
+    if me.role=='dirigente':
+        students=User.query.filter_by(school_id=me.school_id, role='studente').order_by(User.class_name,User.surname).all()
+    elif me.role=='genitore':
+        child_email=me.email.replace('genitore.','',1)
+        child=User.query.filter_by(email=child_email).first()
+        students=[child] if child else []
+    if request.method=='POST':
+        sid=int(request.form['student_id'])
+        old=ParentConsent.query.filter_by(student_id=sid).first()
+        if not old:
+            old=ParentConsent(school_id=me.school_id, student_id=sid)
+            db.session.add(old)
+        old.consent_focus=bool(request.form.get('consent_focus'))
+        old.consent_analytics=bool(request.form.get('consent_analytics'))
+        old.consent_badge=bool(request.form.get('consent_badge'))
+        old.signed_by=f'{me.name} {me.surname}'.strip() or me.email
+        old.signed_at=datetime.utcnow()
+        db.session.commit(); flash('Consensi aggiornati','success')
+    consents={c.student_id:c for c in ParentConsent.query.filter_by(school_id=me.school_id).all()}
+    return render_template('consensi.html', students=students, consents=consents)
+
+@app.route('/ministeriale')
+@login_required(['dirigente','docente'])
+def ministeriale():
+    me=current_user(); q=FocusRecord.query.join(Lesson)
+    q=q.filter(Lesson.school_id==me.school_id) if me.role=='dirigente' else q.filter(Lesson.teacher_id==me.id)
+    records=q.all()
+    by_class={}
+    by_subject={}
+    for r in records:
+        c=r.student.class_name or 'N/D'; by_class.setdefault(c, []).append(r)
+        by_subject.setdefault(r.lesson.subject, []).append(r)
+    payload={
+        'app':APP_NAME,
+        'data_generazione':datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'records':len(records),
+        'ore_focus':round(sum(r.minutes_focus for r in records)/60,1),
+        'violazioni':sum(r.violations for r in records),
+        'tokens':sum(r.tokens for r in records),
+        'indice_attenzione':attention_index(records),
+        'rischio_ai':focus_risk_score(records),
+        'classi':[(k, attention_index(v), sum(x.violations for x in v), sum(x.tokens for x in v)) for k,v in by_class.items()],
+        'materie':[(k, attention_index(v), sum(x.violations for x in v), round(sum(x.minutes_focus for x in v)/60,1)) for k,v in by_subject.items()]
+    }
+    return render_template('ministeriale.html', data=payload)
+
+@app.route('/interventi', methods=['GET','POST'])
+@login_required(['dirigente','docente'])
+def interventi():
+    me=current_user()
+    if request.method=='POST':
+        p=InterventionPlan(school_id=me.school_id, class_name=request.form.get('class_name'), title=request.form.get('title'), owner=f'{me.name} {me.surname}'.strip(), status=request.form.get('status','aperto'), action=request.form.get('action'))
+        db.session.add(p); db.session.commit(); flash('Piano di intervento salvato','success')
+    plans=InterventionPlan.query.filter_by(school_id=me.school_id).order_by(InterventionPlan.id.desc()).all()
+    return render_template('interventi.html', plans=plans)
+
+@app.route('/api/v1/device-event', methods=['POST'])
+@login_required('studente')
+def api_device_event():
+    me=current_user(); data=request.get_json(silent=True) or {}
+    weights={'exit_app':15,'social_open':25,'screen_on':5,'screenshot':10,'multitasking':15,'wifi_checkin':0,'nfc_checkin':0}
+    ev_type=data.get('event_type','generic')
+    ev=DeviceEvent(school_id=me.school_id, student_id=me.id, lesson_id=data.get('lesson_id'), event_type=ev_type, value=str(data.get('value','')), risk_weight=weights.get(ev_type,3), source=data.get('source','mobile_api'))
+    db.session.add(ev); db.session.commit()
+    return jsonify({'ok':True,'event_id':ev.id,'risk_weight':ev.risk_weight})
+
 @app.cli.command('init-db')
 def init_db_cmd():
     init_db(); print('Database inizializzato')
 
 def init_db():
     db.create_all()
-    if not User.query.filter_by(email='superadmin@focusscuola.it').first():
-        su=User(role='superadmin', surname='Super', name='Admin', email='superadmin@focusscuola.it', password_hash=generate_password_hash('admin123'))
+    if not User.query.filter_by(email='superadmin@focus360.ai').first():
+        su=User(role='superadmin', surname='Super', name='Admin', email='superadmin@focus360.ai', password_hash=generate_password_hash('admin123'))
         db.session.add(su)
     db.session.commit()
 
+with app.app_context():
+    init_db()
+
 if __name__ == '__main__':
-    with app.app_context(): init_db()
     app.run(debug=True)
