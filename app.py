@@ -1,4 +1,4 @@
-import os, csv, io, secrets, string, hashlib, json
+import os, csv, io, secrets, string, hashlib, json, random
 from datetime import datetime, timedelta, date
 from functools import wraps
 from urllib.parse import urlparse
@@ -732,6 +732,169 @@ def api_device_event():
     ev=DeviceEvent(school_id=me.school_id, student_id=me.id, lesson_id=data.get('lesson_id'), event_type=ev_type, value=str(data.get('value','')), risk_weight=weights.get(ev_type,3), source=data.get('source','mobile_api'))
     db.session.add(ev); db.session.commit()
     return jsonify({'ok':True,'event_id':ev.id,'risk_weight':ev.risk_weight})
+
+
+
+DEMO_USERS = {
+    'dirigente@demo.focus360.ai': 'dirigente123',
+    'docente@demo.focus360.ai': 'docente123',
+    'studente@demo.focus360.ai': 'studente123',
+    'genitore@demo.focus360.ai': 'genitore123',
+}
+
+def upsert_user(email, password, **kwargs):
+    u = User.query.filter_by(email=email).first()
+    if not u:
+        u = User(email=email, password_hash=generate_password_hash(password), **kwargs)
+        db.session.add(u)
+        db.session.flush()
+    else:
+        for k, v in kwargs.items():
+            setattr(u, k, v)
+        u.password_hash = generate_password_hash(password)
+        u.active = True
+    return u
+
+def create_demo_environment(reset=False):
+    """Genera un tenant dimostrativo Enterprise con dati realistici.
+    Pensato per demo commerciali: dashboard già popolate, utenti demo, classi, lezioni,
+    FocusRecord, badge, consensi, smart locker, pagamenti, interventi e Educational Passport.
+    """
+    existing = School.query.filter_by(tenant_slug='demo-focus360-enterprise').first()
+    if existing and not reset:
+        return existing, 'already_exists'
+    if existing and reset:
+        sid = existing.id
+        # Elimina dati demo in ordine semplice. Le tabelle non hanno cascade esplicito.
+        for model in [InterventionPlan, DeviceEvent, ParentConsent, PaymentRecord, PortfolioItem, Badge, SmartLocker, WellbeingSurvey, FocusRecord, Lesson, BlockchainEvent, User]:
+            q = model.query
+            if hasattr(model, 'school_id'):
+                q = q.filter_by(school_id=sid)
+            elif model is User:
+                q = q.filter_by(school_id=sid)
+            else:
+                continue
+            q.delete(synchronize_session=False)
+        db.session.delete(existing)
+        db.session.commit()
+
+    school = School(
+        name='IIS Demo Focus360 AI Enterprise',
+        codice_meccanografico='MEIS000360',
+        city='Barcellona Pozzo di Gotto',
+        address='Via Innovazione Digitale 1',
+        fiscal_code='00000000000',
+        pec='meis000360@pec.istruzione.it',
+        billing_email='amministrazione@demo.focus360.ai',
+        plan='ENTERPRISE',
+        payment_status='pagato',
+        payment_method='bonifico / MEPA',
+        tenant_slug='demo-focus360-enterprise',
+        notes='Ambiente demo generato automaticamente per presentazioni commerciali Focus360 AI Enterprise.'
+    )
+    db.session.add(school); db.session.flush()
+
+    dirigente = upsert_user('dirigente@demo.focus360.ai', 'dirigente123', school_id=school.id, role='dirigente', surname='Verdi', name='Laura', phone='0900000001')
+    docenti = [
+        upsert_user('docente@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Rossi', name='Marco', discipline='Informatica', class_name='3A INF', phone='0900000100'),
+        upsert_user('docente.matematica@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Bianchi', name='Anna', discipline='Matematica', class_name='4A INF', phone='0900000101'),
+        upsert_user('docente.sistemi@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Costa', name='Giuseppe', discipline='Sistemi e reti', class_name='5A INF', phone='0900000102'),
+        upsert_user('docente.inglese@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Greco', name='Elena', discipline='Inglese', class_name='3B INF', phone='0900000103'),
+        upsert_user('docente.civica@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Arena', name='Francesca', discipline='Educazione civica', class_name='4B INF', phone='0900000104'),
+    ]
+
+    classes = ['3A INF','3B INF','4A INF','4B INF','5A INF']
+    nomi = ['Luca','Giulia','Alessandro','Martina','Salvatore','Chiara','Davide','Sofia','Andrea','Elisa','Gabriele','Sara','Francesco','Noemi','Matteo','Aurora','Simone','Alessia','Marco','Federica']
+    cognomi = ['Rizzo','Messina','Conti','Lombardo','Grasso','Ferrara','Marino','Caruso','De Luca','Costa','Russo','Parisi','Foti','Amato','Longo','Puglisi','Vitale','Romano','Giordano','Barresi']
+    studenti=[]
+    idx=1
+    for c in classes:
+        for i in range(8):
+            name = nomi[(idx+i) % len(nomi)]
+            surname = cognomi[(idx*2+i) % len(cognomi)]
+            email = 'studente@demo.focus360.ai' if idx == 1 else f'studente{idx:03d}@demo.focus360.ai'
+            pwd = 'studente123' if idx == 1 else 'studenti123'
+            st = upsert_user(email, pwd, school_id=school.id, role='studente', surname=surname, name=name, class_name=c, birthdate=f'200{random.randint(7,9)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}', phone=f'333000{idx:04d}')
+            studenti.append(st)
+            parent_email = 'genitore@demo.focus360.ai' if idx == 1 else f'genitore.studente{idx:03d}@demo.focus360.ai'
+            parent_pwd = 'genitore123' if idx == 1 else 'genitori123'
+            upsert_user(parent_email, parent_pwd, school_id=school.id, role='genitore', surname='Genitore', name=f'{name} {surname}', class_name=c, phone=f'333900{idx:04d}')
+            idx += 1
+    db.session.flush()
+
+    # Smart locker / phone box demo
+    for c in classes:
+        for n in range(1, 7):
+            db.session.add(SmartLocker(school_id=school.id, class_name=c, box_code=f'{c.replace(" ","")}-BOX-{n:02d}', status=random.choice(['libero','occupato','libero','manutenzione'])))
+
+    # Lezioni e record focus ultimi 7 giorni
+    subjects = ['Informatica','Sistemi e reti','Matematica','Inglese','Educazione civica']
+    for day in range(7):
+        lesson_date = datetime.utcnow() - timedelta(days=day)
+        for ci, c in enumerate(classes):
+            teacher = docenti[ci % len(docenti)]
+            subject = subjects[ci % len(subjects)]
+            raw = secrets.token_urlsafe(16)
+            lesson = Lesson(school_id=school.id, teacher_id=teacher.id, class_name=c, subject=subject, started_at=lesson_date.replace(hour=8+(ci%5), minute=0, second=0, microsecond=0), duration_minutes=60, qr_token_hash=sha(raw), qr_expires_at=lesson_date+timedelta(minutes=10), status='chiusa')
+            db.session.add(lesson); db.session.flush()
+            class_students=[s for s in studenti if s.class_name==c]
+            for st in class_students:
+                # andamento realistico: molte sessioni positive, alcune violazioni
+                exited = 1 if random.random() < (0.04 + ci*0.01) else 0
+                social = 1 if random.random() < (0.06 + ci*0.015) else 0
+                screen = random.randint(0, 8) if not (exited or social) else random.randint(12, 42)
+                minutes = 60 if not (exited or social) else random.randint(25, 55)
+                rec = FocusRecord(lesson_id=lesson.id, student_id=st.id, minutes_focus=minutes, focus_active=(minutes>=60 and exited==0 and social==0), violations=exited+social, opened_social=social, exited_app=exited, screen_minutes=screen)
+                rec.points=calc_points(rec.minutes_focus,60,rec.exited_app,rec.opened_social,rec.screen_minutes)
+                rec.tokens=1 if rec.focus_active else 0
+                payload={'demo':True,'student':st.email,'lesson':lesson.id,'points':rec.points,'tokens':rec.tokens,'minutes':rec.minutes_focus}
+                rec.blockchain_hash=write_chain(school.id,'DEMO_FOCUS_RECORD',payload)
+                db.session.add(rec)
+
+    db.session.flush()
+    # Badge, consensi, wellbeing, passport
+    categories = [
+        ('Digital Citizenship','Uso consapevole dello smartphone e netiquette',2,85),
+        ('Cybersecurity','Password sicure, phishing e protezione account',3,88),
+        ('AI Literacy','Uso responsabile dell’intelligenza artificiale generativa',3,90),
+        ('Educazione Civica','Benessere digitale, diritti e doveri online',4,86),
+        ('PCTO','Laboratorio Focus360: progettazione dashboard e dati',10,92),
+        ('Soft Skills','Collaborazione, responsabilità e leadership positiva',2,84),
+    ]
+    for st in studenti:
+        # consensi
+        db.session.add(ParentConsent(school_id=school.id, student_id=st.id, signed_by='Genitore demo', consent_focus=True, consent_analytics=True, consent_badge=True))
+        # check-in benessere
+        for _ in range(3):
+            db.session.add(WellbeingSurvey(school_id=school.id, student_id=st.id, stress_level=random.randint(1,4), perceived_attention=random.randint(3,5), sleep_quality=random.randint(3,5), note='Check-in demo benessere digitale.'))
+        # passport items
+        for cat, title, hours, score in random.sample(categories, k=random.randint(3,6)):
+            payload={'demo':True,'student':st.email,'category':cat,'title':title,'score':score}
+            h=write_chain(school.id,'DEMO_PASSPORT_ITEM',payload)
+            db.session.add(PortfolioItem(school_id=school.id, student_id=st.id, category=cat, title=title, description='Attività validata nell’ambiente demo Focus360 AI Enterprise.', hours=hours, score=score, validator='Portfolio Manager Demo', evidence_hash=h))
+        # badge per i più virtuosi
+        if random.random() < 0.65:
+            for badge_name in random.sample(['Digital Citizen Bronze','Focus Champion','AI Innovator','Cybersecurity Explorer','Classe 100% Focus'], k=random.randint(1,3)):
+                payload={'demo':True,'student':st.email,'badge':badge_name}
+                nft=write_chain(school.id,'DEMO_BADGE_NFT',payload)
+                db.session.add(Badge(school_id=school.id, user_id=st.id, class_name=st.class_name, name=badge_name, description='Badge NFT educativo non speculativo generato per demo commerciale.', nft_hash=nft))
+
+    db.session.add(PaymentRecord(school_id=school.id, invoice_number='F360-DEMO-001', amount=7490, method='MEPA / bonifico', status='pagato', due_date=date.today()+timedelta(days=30), paid_at=datetime.utcnow(), note='Licenza Enterprise/PNRR demo annuale.'))
+    db.session.add(InterventionPlan(school_id=school.id, class_name='4B INF', title='Riduzione distrazione fascia 11:00-12:00', owner='Dirigente Demo', status='aperto', action='Attivare micro-pause, attività cooperative e monitoraggio Focus collettivo al 90%.'))
+    db.session.add(InterventionPlan(school_id=school.id, class_name='3A INF', title='Educazione civica digitale', owner='Docente Demo', status='in corso', action='Percorso su notifiche, attenzione, dipendenza digitale e gestione consapevole dello smartphone.'))
+    db.session.commit()
+    return school, 'created'
+
+@app.route('/superadmin/create-demo', methods=['POST'])
+@login_required('superadmin')
+def create_demo_route():
+    reset = bool(request.form.get('reset'))
+    school, status = create_demo_environment(reset=reset)
+    if status == 'already_exists':
+        flash('Ambiente demo già presente. Usa “Rigenera demo” per ricrearlo da zero.', 'info')
+    else:
+        flash('Ambiente demo Enterprise creato con utenti, classi, report, Wellness Score ed Educational Passport.', 'success')
+    return redirect(url_for('dashboard_superadmin'))
 
 @app.cli.command('init-db')
 def init_db_cmd():

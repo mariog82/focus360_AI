@@ -128,3 +128,22 @@ Se Render continua a usare una cache vecchia, fare:
 1. Render Dashboard -> Web Service -> Manual Deploy.
 2. Selezionare **Clear build cache & deploy**.
 3. Verificare che `requirements.txt` non contenga `pandas`, `numpy` o `scikit-learn` nella versione prototipo.
+
+
+## Focus360 AI Enterprise - ambiente demo
+
+Dopo il login come SuperAdmin puoi usare il pulsante **Genera scuola demo** nella console aziendale.
+
+Credenziali demo generate:
+
+| Ruolo | Email | Password |
+|---|---|---|
+| SuperAdmin | superadmin@focus360.ai | admin123 |
+| Dirigente Demo | dirigente@demo.focus360.ai | dirigente123 |
+| Docente Demo | docente@demo.focus360.ai | docente123 |
+| Studente Demo | studente@demo.focus360.ai | studente123 |
+| Genitore Demo | genitore@demo.focus360.ai | genitore123 |
+
+Il pulsante crea automaticamente un tenant Enterprise con classi, docenti, studenti, genitori, lezioni, record focus, Digital Wellness Score, Educational Passport, badge NFT educativi, consensi, smart locker, pagamento demo e report ministeriali.
+
+Per Render è incluso `runtime.txt` con Python 3.11.9 per evitare problemi di compilazione delle dipendenze native.
