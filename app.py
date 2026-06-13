@@ -8,7 +8,6 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import qrcode
 from PIL import Image
-import pandas as pd
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-change-me')
@@ -629,9 +628,14 @@ def report_csv():
     else: q=q.filter(Lesson.school_id==me.school_id)
     for r in q.all():
         rows.append({'data':r.created_at.strftime('%Y-%m-%d'), 'classe':r.student.class_name, 'studente':f'{r.student.surname} {r.student.name}', 'materia':r.lesson.subject, 'minuti_focus':r.minutes_focus, 'violazioni':r.violations, 'punti':r.points, 'token':r.tokens, 'hash':r.blockchain_hash})
-    df=pd.DataFrame(rows)
-    buf=io.BytesIO(); df.to_csv(buf,index=False,sep=';'); buf.seek(0)
-    return send_file(buf, as_attachment=True, download_name='focus_report.csv', mimetype='text/csv')
+    buf = io.StringIO()
+    fieldnames = ['data','classe','studente','materia','minuti_focus','violazioni','punti','token','hash']
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=';')
+    writer.writeheader()
+    writer.writerows(rows)
+    mem = io.BytesIO(buf.getvalue().encode('utf-8-sig'))
+    mem.seek(0)
+    return send_file(mem, as_attachment=True, download_name='focus_report.csv', mimetype='text/csv; charset=utf-8')
 
 @app.route('/api/analytics')
 @login_required(['dirigente','docente'])

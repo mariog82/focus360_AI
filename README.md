@@ -119,3 +119,12 @@ Focus360 AI non deve essere presentata come app di controllo, ma come piattaform
 - PCTO e portfolio competenze;
 - riduzione della distrazione digitale;
 - dialogo scuola-famiglia.
+
+
+## Fix deploy Render - pandas rimosso
+Questa versione non richiede pandas. L'esportazione CSV usa solo la libreria standard Python (`csv` + `io`) per evitare errori di compilazione su Render come `metadata-generation-failed` o `ninja: build stopped`.
+
+Se Render continua a usare una cache vecchia, fare:
+1. Render Dashboard -> Web Service -> Manual Deploy.
+2. Selezionare **Clear build cache & deploy**.
+3. Verificare che `requirements.txt` non contenga `pandas`, `numpy` o `scikit-learn` nella versione prototipo.
