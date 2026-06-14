@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block content %}
+<div class="hero p-4 mb-4"><h1>Differenza tra pacchetti</h1><p>Separazione commerciale dei moduli Focus360 AI.</p></div>
+<div class="row g-3">{% for code,p in plans.items() %}<div class="col-lg-4"><div class="card p-3 h-100"><h3>{{p.name}}</h3><div class="kpi">{{p.price}}</div><p>{{p.modules}}</p><h6>Funzioni abilitate</h6><ul>{% for f in p.features %}<li>{{f}}</li>{% endfor %}</ul></div></div>{% endfor %}</div>
+<div class="card p-3 mt-3"><h4>Sintesi operativa</h4><table class="table"><tr><th>Modulo</th><th>Base</th><th>Pro</th><th>Enterprise/PNRR</th></tr><tr><td>QR docente + focus studente</td><td>✔</td><td>✔</td><td>✔</td></tr><tr><td>Upload CSV docenti/studenti</td><td>✔</td><td>✔</td><td>✔</td></tr><tr><td>AI Analytics e Wellness Score</td><td>—</td><td>✔</td><td>✔</td></tr><tr><td>Educational Passport</td><td>—</td><td>✔</td><td>✔</td></tr><tr><td>Smart Locker / Phone Box</td><td>—</td><td>—</td><td>✔, disattivabile dal SuperAdmin</td></tr><tr><td>Blockchain badge, API, report ministeriali</td><td>—</td><td>parziale</td><td>✔</td></tr></table></div>
+{% endblock %}
