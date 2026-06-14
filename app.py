@@ -604,6 +604,35 @@ def qr_png(lesson_id):
     buf=io.BytesIO(); img.save(buf, format='PNG'); buf.seek(0)
     return send_file(buf, mimetype='image/png')
 
+
+@app.route('/join-lesson', methods=['GET','POST'])
+@login_required(['studente'])
+def join_lesson():
+    """Pagina studente per partecipare alla lezione tramite QR o link incollato.
+    Nel prototipo web la scansione usa la fotocamera del browser; in produzione può essere sostituita da app mobile nativa.
+    """
+    me=current_user()
+    if request.method == 'POST':
+        qr_value=(request.form.get('qr_value') or '').strip()
+        if not qr_value:
+            flash('Inserisci o scansiona il link QR generato dal docente.','warning')
+            return redirect(url_for('join_lesson'))
+        # Accetta sia URL completo sia percorso /scan/<lesson_id>/<token>
+        try:
+            from urllib.parse import urlparse
+            parsed=urlparse(qr_value)
+            path=parsed.path if parsed.scheme else qr_value
+            parts=[x for x in path.split('/') if x]
+            if len(parts)>=3 and parts[0]=='scan':
+                lesson_id=int(parts[1]); token=parts[2]
+                return redirect(url_for('scan_focus', lesson_id=lesson_id, token=token))
+        except Exception:
+            pass
+        flash('QR non riconosciuto. Usa il QR temporaneo proiettato dal docente.','danger')
+        return redirect(url_for('join_lesson'))
+    active_lessons=Lesson.query.filter_by(school_id=me.school_id, class_name=me.class_name).filter(Lesson.qr_expires_at>=datetime.utcnow()).order_by(Lesson.id.desc()).all()
+    return render_template('join_lesson.html', active_lessons=active_lessons)
+
 @app.route('/scan/<int:lesson_id>/<token>', methods=['GET','POST'])
 @login_required(['studente'])
 def scan_focus(lesson_id, token):

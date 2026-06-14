@@ -235,3 +235,19 @@ Il SuperAdmin può ora:
 
 ### Deploy su Render dopo aggiornamento
 Se usi un database già esistente, la webapp esegue una piccola migrazione prototipo per aggiungere `temporary_password` e `must_change_password`. Se il deploy dà problemi, usare **Clear build cache & deploy** e, per SQLite, eliminare il vecchio file database solo in ambiente demo.
+
+## Focus360 AI Enterprise v5
+
+Novità v5:
+- aggiunto pulsante Studente **Partecipa alla lezione** nella dashboard e nel menu;
+- nuova pagina `/join-lesson` con scanner QR da browser e campo manuale per incollare il link QR;
+- flusso corretto: Docente genera QR → Studente scansiona → conferma dati lezione → Attiva Focus → timer/sessione → punti, token, hash blockchain e Passport;
+- il QR resta temporaneo e il token non viene mostrato nelle liste studente per evitare accessi impropri.
+
+### Uso dello studente
+1. Login con `studente@demo.focus360.ai` / `studente123`.
+2. Click su **Partecipa alla lezione**.
+3. Autorizza fotocamera e scansiona il QR mostrato dal docente, oppure incolla il link QR.
+4. Verifica materia/classe e premi **Attiva Focus**.
+5. A fine ora chiudi la sessione e registra minuti/violazioni del prototipo.
+
