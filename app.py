@@ -1,7 +1,7 @@
-import os, csv, io, secrets, string, hashlib, json, random
+import os, csv, io, secrets, string, hashlib, json, random, smtplib
 from datetime import datetime, timedelta, date
 from functools import wraps
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -21,9 +21,24 @@ db = SQLAlchemy(app)
 
 APP_NAME = 'Focus360 AI'
 PLANS = {
-    'BASE': {'name':'Pacchetto Base', 'modules':'App focus, QR docente, dashboard, report CSV', 'price':'€ 990/anno'},
-    'PRO': {'name':'Pacchetto Pro', 'modules':'AI analytics, gamification, ranking scuole, benessere digitale', 'price':'€ 2.490/anno'},
-    'ENTERPRISE': {'name':'Enterprise/PNRR', 'modules':'Armadietti smart, blockchain badge, report ministeriali, registro elettronico, API', 'price':'su preventivo'}
+    'BASE': {
+        'name':'Pacchetto Base',
+        'modules':'App Focus, QR docente, dashboard essenziale, CSV docenti/studenti, report CSV',
+        'price':'€ 990/anno',
+        'features':['qr','dashboard','csv','report_csv']
+    },
+    'PRO': {
+        'name':'Pacchetto Pro',
+        'modules':'Tutto Base + AI analytics, gamification, ranking classi/scuole, Digital Wellness Score, report famiglie',
+        'price':'€ 2.490/anno',
+        'features':['qr','dashboard','csv','report_csv','ai','gamification','wellbeing','ranking','passport']
+    },
+    'ENTERPRISE': {
+        'name':'Enterprise/PNRR',
+        'modules':'Tutto Pro + Smart Locker/Phone Box, blockchain badge, report ministeriali, API, integrazione registro elettronico',
+        'price':'su preventivo',
+        'features':['qr','dashboard','csv','report_csv','ai','gamification','wellbeing','ranking','passport','blockchain','lockers','api','registro','ministeriale']
+    }
 }
 ROLES = ['superadmin','dirigente','docente','studente','genitore']
 BANNED_APPS = ['Instagram','TikTok','WhatsApp','Giochi','Browser non autorizzato']
@@ -45,10 +60,14 @@ class School(db.Model):
     active = db.Column(db.Boolean, default=True)
     tenant_slug = db.Column(db.String(80))
     notes = db.Column(db.Text)
+    modules_enabled = db.Column(db.Text, default='')  # CSV features abilitate/override dal SuperAdmin
+    smart_locker_enabled = db.Column(db.Boolean, default=True)
+    last_expiry_notice_at = db.Column(db.DateTime, nullable=True)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     school_id = db.Column(db.Integer, db.ForeignKey('school.id'), nullable=True)
+    parent_student_id = db.Column(db.Integer, nullable=True)
     role = db.Column(db.String(20), nullable=False)
     surname = db.Column(db.String(80))
     name = db.Column(db.String(80))
@@ -203,7 +222,7 @@ def current_user():
 
 @app.context_processor
 def inject_user():
-    return {'me': current_user(), 'plans': PLANS, 'APP_NAME': APP_NAME}
+    return {'me': current_user(), 'plans': PLANS, 'APP_NAME': APP_NAME, 'plan_enabled': plan_enabled if 'plan_enabled' in globals() else None, 'today': date.today()}
 
 def login_required(role=None):
     def deco(fn):
@@ -395,13 +414,51 @@ def simple_passport_pdf(data):
     pdf+=f'trailer << /Size {len(objects)+1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF'.encode()
     return pdf
 
+def default_features_for_plan(plan):
+    return set(PLANS.get(plan or 'BASE', PLANS['BASE']).get('features', []))
+
+def enabled_features(school):
+    if not school:
+        return default_features_for_plan('BASE')
+    base = default_features_for_plan(school.plan)
+    extra = {x.strip() for x in (school.modules_enabled or '').split(',') if x.strip()}
+    return base | extra
+
 def plan_enabled(school, feature):
-    matrix={
-        'BASE': {'qr','dashboard','csv'},
-        'PRO': {'qr','dashboard','csv','ai','gamification','wellbeing','ranking'},
-        'ENTERPRISE': {'qr','dashboard','csv','ai','gamification','wellbeing','ranking','blockchain','lockers','api','registro'}
-    }
-    return feature in matrix.get((school.plan if school else 'BASE'), set())
+    if feature == 'lockers' and school and not getattr(school, 'smart_locker_enabled', True):
+        return False
+    return feature in enabled_features(school)
+
+def require_feature(feature):
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            me = current_user()
+            if me and me.school_id and not plan_enabled(me.school, feature):
+                flash(f'Modulo non attivo per il piano {me.school.plan}. Contattare il SuperAdmin per abilitarlo.', 'warning')
+                return redirect(url_for('index'))
+            return fn(*args, **kwargs)
+        return wrapper
+    return deco
+
+def child_for_parent(parent):
+    if not parent or parent.role != 'genitore':
+        return None
+    if getattr(parent, 'parent_student_id', None):
+        st = User.query.get(parent.parent_student_id)
+        if st and st.school_id == parent.school_id and st.role == 'studente':
+            return st
+    child_email = parent.email.replace('genitore.', '', 1)
+    child = User.query.filter_by(email=child_email, school_id=parent.school_id, role='studente').first()
+    if child:
+        return child
+    # fallback demo/commerciale: primo studente della stessa scuola associabile al genitore demo
+    return User.query.filter_by(school_id=parent.school_id, role='studente').order_by(User.id).first()
+
+def days_to_expiry(school):
+    if not school or not school.license_end:
+        return None
+    return (school.license_end - date.today()).days
 
 def school_scope_query(model):
     me=current_user()
@@ -458,24 +515,46 @@ def change_password():
 @login_required('superadmin')
 def dashboard_superadmin():
     if request.method=='POST':
+        required=['name','codice','city','address','fiscal_code','pec','billing_email','license_end','ds_email','ds_surname','ds_name']
+        missing=[x for x in required if not request.form.get(x)]
+        if missing:
+            flash('Tutte le informazioni dell’istituto e del dirigente sono obbligatorie: ' + ', '.join(missing), 'danger')
+            return redirect(url_for('dashboard_superadmin'))
         lic_end = request.form.get('license_end')
-        license_end = datetime.strptime(lic_end, '%Y-%m-%d').date() if lic_end else date.today()+timedelta(days=365)
-        school=School(name=request.form['name'], codice_meccanografico=request.form.get('codice'), city=request.form.get('city'), address=request.form.get('address'), fiscal_code=request.form.get('fiscal_code'), pec=request.form.get('pec'), billing_email=request.form.get('billing_email'), plan=request.form.get('plan','BASE'), payment_status=request.form.get('payment_status','in_attesa'), payment_method=request.form.get('payment_method','bonifico'), license_end=license_end)
+        license_end = datetime.strptime(lic_end, '%Y-%m-%d').date()
+        school=School(
+            name=request.form['name'], codice_meccanografico=request.form.get('codice'), city=request.form.get('city'),
+            address=request.form.get('address'), fiscal_code=request.form.get('fiscal_code'), pec=request.form.get('pec'),
+            billing_email=request.form.get('billing_email'), plan=request.form.get('plan','BASE'),
+            payment_status=request.form.get('payment_status','in_attesa'), payment_method=request.form.get('payment_method','bonifico'),
+            license_end=license_end, modules_enabled=request.form.get('modules_enabled',''),
+            smart_locker_enabled=bool(request.form.get('smart_locker_enabled')), active=True
+        )
         db.session.add(school); db.session.commit()
         pwd=random_password()
-        dirigente=User(school_id=school.id, role='dirigente', surname=request.form.get('ds_surname','Dirigente'), name=request.form.get('ds_name','Scolastico'), email=request.form['ds_email'].lower(), password_hash=generate_password_hash(pwd), temporary_password=pwd, must_change_password=True)
+        dirigente=User(school_id=school.id, role='dirigente', surname=request.form.get('ds_surname'), name=request.form.get('ds_name'), email=request.form['ds_email'].lower(), password_hash=generate_password_hash(pwd), temporary_password=pwd, must_change_password=True)
         db.session.add(dirigente); db.session.commit()
         flash(f'Istituto creato. Credenziali dirigente: {dirigente.email} / {pwd}','success')
     schools=School.query.order_by(School.id.desc()).all()
-    return render_template('superadmin.html', schools=schools, payments=PaymentRecord.query.order_by(PaymentRecord.id.desc()).limit(10).all())
+    expiring=[s for s in schools if days_to_expiry(s) is not None and days_to_expiry(s) <= 30]
+    return render_template('superadmin.html', schools=schools, expiring=expiring, payments=PaymentRecord.query.order_by(PaymentRecord.id.desc()).limit(10).all())
 
 @app.route('/superadmin/school/<int:school_id>/update', methods=['POST'])
 @login_required('superadmin')
 def superadmin_update_school(school_id):
     school=School.query.get_or_404(school_id)
+    # Modifica completa del tenant scolastico da SuperAdmin
+    for field, form_name in [
+        ('name','name'), ('codice_meccanografico','codice'), ('city','city'), ('address','address'),
+        ('fiscal_code','fiscal_code'), ('pec','pec'), ('billing_email','billing_email'), ('notes','notes')
+    ]:
+        if form_name in request.form:
+            setattr(school, field, request.form.get(form_name))
     school.plan=request.form.get('plan', school.plan)
     school.payment_status=request.form.get('payment_status', school.payment_status)
     school.payment_method=request.form.get('payment_method', school.payment_method)
+    school.modules_enabled=request.form.get('modules_enabled', school.modules_enabled or '')
+    school.smart_locker_enabled=bool(request.form.get('smart_locker_enabled'))
     school.active = bool(request.form.get('active'))
     lic_end=request.form.get('license_end')
     if lic_end:
@@ -486,7 +565,7 @@ def superadmin_update_school(school_id):
             return redirect(url_for('dashboard_superadmin'))
     school.notes=request.form.get('notes', school.notes)
     db.session.commit()
-    flash('Istituto aggiornato: piano, pagamento, stato e scadenza licenza modificati.','success')
+    flash('Istituto aggiornato: anagrafica, piano, moduli, smart locker, pagamento, stato e scadenza licenza modificati.','success')
     return redirect(url_for('dashboard_superadmin'))
 
 @app.route('/superadmin/school/<int:school_id>/toggle', methods=['POST'])
@@ -530,6 +609,86 @@ def export_credentials():
     data=io.BytesIO(out.getvalue().encode('utf-8-sig'))
     return send_file(data, mimetype='text/csv', as_attachment=True, download_name=f'focus360_credenziali_istituto_{school_id}.csv')
 
+
+@app.route('/dirigente/users')
+@login_required('dirigente')
+def dirigente_users():
+    me=current_user()
+    users=User.query.filter(User.school_id==me.school_id, User.role.in_(['docente','studente','genitore'])).order_by(User.role, User.class_name, User.surname).all()
+    return render_template('users_manage.html', users=users)
+
+@app.route('/dirigente/users/<int:user_id>/edit', methods=['GET','POST'])
+@login_required('dirigente')
+def dirigente_edit_user(user_id):
+    me=current_user(); u=User.query.get_or_404(user_id)
+    if u.school_id != me.school_id or u.role not in ['docente','studente','genitore']:
+        flash('Utente non modificabile', 'danger'); return redirect(url_for('dirigente_users'))
+    if request.method=='POST':
+        new_email=(request.form.get('email') or '').strip().lower()
+        if new_email != u.email and User.query.filter_by(email=new_email).first():
+            flash('Email già presente nel sistema', 'danger'); return redirect(url_for('dirigente_edit_user', user_id=u.id))
+        u.surname=request.form.get('surname','')
+        u.name=request.form.get('name','')
+        u.email=new_email
+        u.phone=request.form.get('phone','')
+        u.discipline=request.form.get('discipline','')
+        u.class_name=request.form.get('class_name','')
+        u.birthdate=request.form.get('birthdate','')
+        u.active=bool(request.form.get('active'))
+        db.session.commit(); flash('Utente aggiornato', 'success')
+        return redirect(url_for('dirigente_users'))
+    return render_template('user_edit.html', u=u)
+
+@app.route('/dirigente/users/<int:user_id>/reset-password', methods=['POST'])
+@login_required('dirigente')
+def dirigente_reset_user_password(user_id):
+    me=current_user(); u=User.query.get_or_404(user_id)
+    if u.school_id != me.school_id or u.role not in ['docente','studente','genitore']:
+        flash('Utente non modificabile', 'danger'); return redirect(url_for('dirigente_users'))
+    pwd=random_password()
+    u.password_hash=generate_password_hash(pwd)
+    u.temporary_password=pwd
+    u.must_change_password=True
+    db.session.commit()
+    flash(f'Password temporanea generata per {u.email}: {pwd}', 'warning')
+    return redirect(url_for('dirigente_users'))
+
+@app.route('/superadmin/school/<int:school_id>/notify-expiry', methods=['POST'])
+@login_required('superadmin')
+def notify_expiry(school_id):
+    school=School.query.get_or_404(school_id)
+    days=days_to_expiry(school)
+    subject=f'Focus360 AI - scadenza abbonamento {school.name}'
+    body=(f'Gentile Istituto {school.name},\n\n'
+          f'la licenza Focus360 AI associata al piano {school.plan} risulta in scadenza il {school.license_end}.\n'
+          f'Giorni residui: {days}.\n\n'
+          'Per evitare l’interruzione dei servizi, si invita a procedere al rinnovo o a contattare il referente commerciale.\n\n'
+          'Cordiali saluti,\nFocus360 AI')
+    sent=False; error=''
+    smtp_host=os.environ.get('SMTP_HOST')
+    if smtp_host and school.billing_email:
+        try:
+            from email.mime.text import MIMEText
+            msg=MIMEText(body, 'plain', 'utf-8')
+            msg['Subject']=subject
+            msg['From']=os.environ.get('SMTP_FROM','noreply@focus360.ai')
+            msg['To']=school.billing_email
+            with smtplib.SMTP(smtp_host, int(os.environ.get('SMTP_PORT','587'))) as server:
+                if os.environ.get('SMTP_TLS','1') == '1': server.starttls()
+                if os.environ.get('SMTP_USER'): server.login(os.environ['SMTP_USER'], os.environ.get('SMTP_PASSWORD',''))
+                server.send_message(msg)
+            sent=True
+        except Exception as exc:
+            error=str(exc)
+    school.last_expiry_notice_at=datetime.utcnow()
+    db.session.commit()
+    mailto=f"mailto:{school.billing_email}?subject={quote(subject)}&body={quote(body)}" if school.billing_email else ''
+    if sent:
+        flash('Email automatica di scadenza inviata all’istituto.', 'success')
+    else:
+        flash('SMTP non configurato o invio non riuscito. Puoi usare il link mail manuale generato.' + (f' Errore: {error}' if error else ''), 'warning')
+    return render_template('expiry_email.html', school=school, subject=subject, body=body, mailto=mailto, sent=sent, error=error)
+
 @app.route('/dirigente')
 @login_required('dirigente')
 def dashboard_dirigente():
@@ -567,7 +726,7 @@ def upload(kind):
                 p_email=parent_csv or f"genitore.{u.email}"
                 if not User.query.filter_by(email=p_email).first():
                     gpwd=random_password()
-                    g=User(school_id=me.school_id, role='genitore', surname='Genitore', name=f'{u.name} {u.surname}', email=p_email, password_hash=generate_password_hash(gpwd), temporary_password=gpwd, must_change_password=True, class_name=u.class_name)
+                    g=User(school_id=me.school_id, parent_student_id=u.id, role='genitore', surname='Genitore', name=f'{u.name} {u.surname}', email=p_email, password_hash=generate_password_hash(gpwd), temporary_password=gpwd, must_change_password=True, class_name=u.class_name)
                     db.session.add(g); created.append((g.email,gpwd,g.role,g.class_name))
         db.session.commit()
         return render_template('upload_result.html', created=created)
@@ -619,7 +778,7 @@ def join_lesson():
             return redirect(url_for('join_lesson'))
         # Accetta sia URL completo sia percorso /scan/<lesson_id>/<token>
         try:
-            from urllib.parse import urlparse
+            from urllib.parse import urlparse, quote
             parsed=urlparse(qr_value)
             path=parsed.path if parsed.scheme else qr_value
             parts=[x for x in path.split('/') if x]
@@ -691,8 +850,7 @@ def dashboard_studente():
 @app.route('/genitore')
 @login_required('genitore')
 def dashboard_genitore():
-    me=current_user(); child_email=me.email.replace('genitore.','',1)
-    child=User.query.filter_by(email=child_email).first()
+    me=current_user(); child=child_for_parent(me)
     records=FocusRecord.query.filter_by(student_id=child.id).order_by(FocusRecord.id.desc()).all() if child else []
     return render_template('genitore.html', child=child, records=records)
 
@@ -700,6 +858,7 @@ def dashboard_genitore():
 
 @app.route('/wellness-score')
 @login_required(['dirigente','docente','studente','genitore'])
+@require_feature('wellbeing')
 def wellness_score_page():
     me=current_user()
     if me.role=='studente':
@@ -723,18 +882,20 @@ def wellness_score_page():
 
 @app.route('/passport')
 @login_required(['studente','genitore'])
+@require_feature('passport')
 def my_passport():
     me=current_user()
-    student=me if me.role=='studente' else User.query.filter_by(email=me.email.replace('genitore.','',1)).first()
+    student=me if me.role=='studente' else child_for_parent(me)
     if not student:
         flash('Studente non trovato','warning'); return redirect(url_for('index'))
     return render_template('passport.html', data=educational_passport(student), can_add=False)
 
 @app.route('/passport/download')
 @login_required(['studente','genitore'])
+@require_feature('passport')
 def my_passport_download():
     me=current_user()
-    student=me if me.role=='studente' else User.query.filter_by(email=me.email.replace('genitore.','',1)).first()
+    student=me if me.role=='studente' else child_for_parent(me)
     if not student:
         flash('Studente non trovato','warning'); return redirect(url_for('index'))
     pdf=simple_passport_pdf(educational_passport(student))
@@ -742,6 +903,7 @@ def my_passport_download():
 
 @app.route('/passport/<int:student_id>/download')
 @login_required(['dirigente','docente'])
+@require_feature('passport')
 def student_passport_download(student_id):
     me=current_user(); student=User.query.get_or_404(student_id)
     if student.school_id != me.school_id or student.role!='studente':
@@ -751,6 +913,7 @@ def student_passport_download(student_id):
 
 @app.route('/passport/<int:student_id>', methods=['GET','POST'])
 @login_required(['dirigente','docente'])
+@require_feature('passport')
 def student_passport(student_id):
     me=current_user(); student=User.query.get_or_404(student_id)
     if student.school_id != me.school_id or student.role!='studente':
@@ -775,6 +938,7 @@ def wellbeing():
 
 @app.route('/ai')
 @login_required(['dirigente','docente'])
+@require_feature('ai')
 def ai_dashboard():
     me=current_user()
     q=FocusRecord.query.join(Lesson)
@@ -791,6 +955,7 @@ def ai_dashboard():
 
 @app.route('/lockers', methods=['GET','POST'])
 @login_required(['dirigente','docente'])
+@require_feature('lockers')
 def lockers():
     me=current_user()
     if request.method=='POST':
@@ -849,6 +1014,7 @@ def api_phonebox_event():
 
 @app.route('/blockchain')
 @login_required(['superadmin','dirigente'])
+@require_feature('blockchain')
 def blockchain():
     me=current_user()
     q=BlockchainEvent.query
@@ -896,6 +1062,11 @@ def api_analytics():
     return jsonify(data)
 
 
+@app.route('/plans')
+@login_required(['superadmin','dirigente'])
+def plans_page():
+    return render_template('plans.html')
+
 @app.route('/payments', methods=['GET','POST'])
 @login_required('superadmin')
 def payments():
@@ -935,6 +1106,7 @@ def consensi():
 
 @app.route('/ministeriale')
 @login_required(['dirigente','docente'])
+@require_feature('ministeriale')
 def ministeriale():
     me=current_user(); q=FocusRecord.query.join(Lesson)
     q=q.filter(Lesson.school_id==me.school_id) if me.role=='dirigente' else q.filter(Lesson.teacher_id==me.id)
@@ -1038,7 +1210,7 @@ def create_demo_environment(reset=False):
         payment_status='pagato',
         payment_method='bonifico / MEPA',
         tenant_slug='demo-focus360-enterprise',
-        notes='Ambiente demo generato automaticamente per presentazioni commerciali Focus360 AI Enterprise.'
+        notes='Ambiente demo generato automaticamente per presentazioni commerciali Focus360 AI Enterprise.', modules_enabled='', smart_locker_enabled=True
     )
     db.session.add(school); db.session.flush()
 
@@ -1066,7 +1238,7 @@ def create_demo_environment(reset=False):
             studenti.append(st)
             parent_email = 'genitore@demo.focus360.ai' if idx == 1 else f'genitore.studente{idx:03d}@demo.focus360.ai'
             parent_pwd = 'genitore123' if idx == 1 else 'genitori123'
-            upsert_user(parent_email, parent_pwd, school_id=school.id, role='genitore', surname='Genitore', name=f'{name} {surname}', class_name=c, phone=f'333900{idx:04d}')
+            upsert_user(parent_email, parent_pwd, school_id=school.id, parent_student_id=st.id, role='genitore', surname='Genitore', name=f'{name} {surname}', class_name=c, phone=f'333900{idx:04d}')
             idx += 1
     db.session.flush()
 
@@ -1155,12 +1327,20 @@ def ensure_runtime_columns():
     if engine_name.startswith('sqlite'):
         stmts = [
             "ALTER TABLE user ADD COLUMN temporary_password VARCHAR(80)",
-            "ALTER TABLE user ADD COLUMN must_change_password BOOLEAN DEFAULT 1"
+            "ALTER TABLE user ADD COLUMN must_change_password BOOLEAN DEFAULT 1",
+            "ALTER TABLE user ADD COLUMN parent_student_id INTEGER",
+            "ALTER TABLE school ADD COLUMN modules_enabled TEXT DEFAULT ''",
+            "ALTER TABLE school ADD COLUMN smart_locker_enabled BOOLEAN DEFAULT 1",
+            "ALTER TABLE school ADD COLUMN last_expiry_notice_at DATETIME"
         ]
     else:
         stmts = [
             'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS temporary_password VARCHAR(80)',
-            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT TRUE'
+            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT TRUE',
+            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS parent_student_id INTEGER',
+            "ALTER TABLE school ADD COLUMN IF NOT EXISTS modules_enabled TEXT DEFAULT ''",
+            'ALTER TABLE school ADD COLUMN IF NOT EXISTS smart_locker_enabled BOOLEAN DEFAULT TRUE',
+            'ALTER TABLE school ADD COLUMN IF NOT EXISTS last_expiry_notice_at TIMESTAMP'
         ]
     for stmt in stmts:
         try:

@@ -1,253 +1,110 @@
-# Focus360 AI
+# Focus360 AI Enterprise v6
 
-Piattaforma web multi-istituto per benessere digitale, concentrazione a lezione, gamification, report scolastici e certificazione educativa.
+Piattaforma Flask multi-istituto per benessere digitale, modalità Focus, gamification, Digital Wellness Score, Educational Passport, gestione licenze e moduli.
 
-## Novità della versione rigenerata
+## Credenziali demo
 
-- **Digital Wellness Score™**: indicatore 0-100 per studente, classe e istituto.
-- **Focus360 AI Educational Passport™**: portfolio digitale verificabile dello studente.
-- Registro Focus con QR temporaneo docente.
-- Gamification: punti Focus, FocusToken e badge.
-- Blockchain educativa prototipo: hash per sessioni, badge e certificazioni.
-- Dashboard SuperAdmin, Dirigente, Docente, Studente e Genitore.
-- Upload CSV docenti/studenti.
-- Report CSV e report ministeriale.
-- Smart locker / phone box, consensi genitori, piani di intervento, API device-event.
+- SuperAdmin: `superadmin@focus360.ai` / `admin123`
+- Dirigente: `dirigente@demo.focus360.ai` / `dirigente123`
+- Docente: `docente@demo.focus360.ai` / `docente123`
+- Studente: `studente@demo.focus360.ai` / `studente123`
+- Genitore: `genitore@demo.focus360.ai` / `genitore123`
 
-## Digital Wellness Score™
+Nel primo accesso gli utenti creati via CSV devono cambiare password. Nel prototipo demo gli utenti predefiniti possono essere rigenerati dal SuperAdmin.
 
-Formula trasparente:
+## Novità v6
 
-```python
-score = (
-  focus_continuity * 0.30 +
-  digital_discipline * 0.25 +
-  consistency * 0.15 +
-  collaborative_focus * 0.15 +
-  digital_citizenship * 0.15
-)
-```
+- Dirigente: gestione/edit utenti creati, reset password temporanea, disattivazione utenti.
+- SuperAdmin: modifica completa dell’istituto, campi obbligatori, scadenza licenza, pagamento, piano, moduli, smart locker ON/OFF.
+- SuperAdmin: avviso scadenza abbonamento con testo email/manuale e invio SMTP se configurato.
+- Password: tutti i campi password hanno pulsante Mostra/Nascondi.
+- Correzione Passport per dirigente, docente, studente e genitore.
+- Correzione associazione genitore-studente tramite `parent_student_id`.
+- Upload CSV docenti/studenti abilitato nei piani Base, Pro ed Enterprise/PNRR.
+- Differenze piani visibili nella pagina `/plans`.
 
-Livelli:
+## Differenze pacchetti
 
-- 0-39 Critico
-- 40-59 Da migliorare
-- 60-79 Buono
-- 80-100 Eccellente
+### Base
+- QR docente
+- app Focus studente
+- dashboard essenziale
+- upload CSV docenti/studenti
+- report CSV
 
-## Educational Passport™
+### Pro
+- tutto Base
+- AI Analytics
+- gamification
+- ranking classi/scuole
+- Digital Wellness Score
+- Educational Passport
+- report famiglie
 
-Il passaporto raccoglie:
+### Enterprise/PNRR
+- tutto Pro
+- Smart Locker / Phone Box
+- blockchain badge
+- API hardware/mobile
+- report ministeriali
+- integrazione registro elettronico
+- moduli gestibili/disattivabili dal SuperAdmin
 
-- ore Focus;
-- FocusToken;
-- badge;
-- Educazione Civica;
-- PCTO;
-- AI Literacy;
-- Cybersecurity;
-- Soft Skills;
-- hash di verifica su ledger educativo.
-
-## Avvio locale
-
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-flask --app app init-db
-python app.py
-```
-
-Apri: http://127.0.0.1:5000
-
-Credenziali demo:
-
-```text
-superadmin@focus360.ai
-admin123
-```
-
-## CSV docenti
+## CSV Docenti
 
 Separatore `;`:
 
-```text
+```csv
 cognome;nome;disciplina;mail;telefono;classe
-Rossi;Mario;Informatica;mario.rossi@scuola.it;3330000000;4A
+Rossi;Mario;Informatica;mario.rossi@scuola.it;3331112222;4A
 ```
 
-## CSV studenti
+## CSV Studenti
 
-```text
-cognome;nome;data di nascita;email;telefono;classe
-Bianchi;Luca;2009-05-10;luca.bianchi@scuola.it;3331111111;4A
+```csv
+cognome;nome;data di nascita;email;telefono;classe;email_genitore
+Bianchi;Luca;2009-04-15;luca.bianchi@studenti.it;3334445555;4A;genitore.bianchi@email.it
 ```
 
-## Deploy su Render
+Il sistema genera username=email e password temporanea casuale. Le credenziali possono essere esportate da Dirigente o SuperAdmin.
 
-1. Crea un repository GitHub e carica tutti i file.
-2. Su Render scegli **New + → Web Service**.
-3. Collega il repository.
-4. Imposta:
+## Avvisi scadenza licenza
 
-```text
-Build Command: pip install -r requirements.txt
-Start Command: gunicorn app:app
+Il SuperAdmin vede gli istituti in scadenza entro 30 giorni e può usare il pulsante `Invia avviso scadenza`.
+
+Se si configurano variabili SMTP, l’app prova l’invio automatico:
+
+```env
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_TLS=1
+SMTP_USER=utente
+SMTP_PASSWORD=password
+SMTP_FROM=noreply@focus360.ai
 ```
 
-5. Variabili d'ambiente:
+Se SMTP non è configurato, viene mostrato un link `mailto:` e il testo già pronto.
 
-```text
-SECRET_KEY=una_chiave_lunga_sicura
+## Deploy Render
+
+Build command:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start command:
+
+```bash
+gunicorn app:app
+```
+
+Variabili consigliate:
+
+```env
+SECRET_KEY=chiave_lunga_sicura
 DATABASE_URL=sqlite:///focus360_ai.db
-```
-
-Per produzione commerciale usare PostgreSQL Render:
-
-```text
-DATABASE_URL=<Internal Database URL del database PostgreSQL Render>
-```
-
-## Note commerciali
-
-Focus360 AI non deve essere presentata come app di controllo, ma come piattaforma per:
-
-- benessere digitale;
-- cittadinanza digitale;
-- report PTOF/educazione civica;
-- PCTO e portfolio competenze;
-- riduzione della distrazione digitale;
-- dialogo scuola-famiglia.
-
-
-## Fix deploy Render - pandas rimosso
-Questa versione non richiede pandas. L'esportazione CSV usa solo la libreria standard Python (`csv` + `io`) per evitare errori di compilazione su Render come `metadata-generation-failed` o `ninja: build stopped`.
-
-Se Render continua a usare una cache vecchia, fare:
-1. Render Dashboard -> Web Service -> Manual Deploy.
-2. Selezionare **Clear build cache & deploy**.
-3. Verificare che `requirements.txt` non contenga `pandas`, `numpy` o `scikit-learn` nella versione prototipo.
-
-
-## Focus360 AI Enterprise - ambiente demo
-
-Dopo il login come SuperAdmin puoi usare il pulsante **Genera scuola demo** nella console aziendale.
-
-Credenziali demo generate:
-
-| Ruolo | Email | Password |
-|---|---|---|
-| SuperAdmin | superadmin@focus360.ai | admin123 |
-| Dirigente Demo | dirigente@demo.focus360.ai | dirigente123 |
-| Docente Demo | docente@demo.focus360.ai | docente123 |
-| Studente Demo | studente@demo.focus360.ai | studente123 |
-| Genitore Demo | genitore@demo.focus360.ai | genitore123 |
-
-Il pulsante crea automaticamente un tenant Enterprise con classi, docenti, studenti, genitori, lezioni, record focus, Digital Wellness Score, Educational Passport, badge NFT educativi, consensi, smart locker, pagamento demo e report ministeriali.
-
-Per Render è incluso `runtime.txt` con Python 3.11.9 per evitare problemi di compilazione delle dipendenze native.
-
-## Novità Focus360 AI Enterprise v3
-
-### Flusso QR studente completo
-1. Il docente avvia la lezione e proietta il QR temporaneo.
-2. Lo studente apre Focus360 AI, effettua il login e inquadra il QR.
-3. Si apre una pagina di conferma con materia, classe e durata.
-4. Lo studente preme **Attiva Focus**.
-5. Il sistema registra l'evento `focus_started` e apre la schermata timer.
-6. A fine lezione lo studente chiude la sessione: vengono calcolati punti, FocusToken, eventuali violazioni e hash blockchain.
-
-### Download Educational Passport PDF
-Nella pagina **Educational Passport** è presente il pulsante **Scarica Passport PDF**. Il PDF è generato senza dipendenze esterne, quindi funziona anche su Render senza installare pacchetti pesanti.
-
-### Phone Box Smart prototipo
-La sezione **Smart Locker** consente di simulare deposito, ritiro e manutenzione di una Phone Box Smart. Ogni deposito genera un `DeviceEvent` positivo, utile come evidenza per Focus, Wellness Score ed Educational Passport.
-
-Endpoint hardware prototipo:
-
-```http
-POST /api/v1/phonebox/event
-Content-Type: application/json
-```
-
-Payload:
-
-```json
-{
-  "api_key": "demo-phonebox-key",
-  "box_code": "3AINF-BOX-01",
-  "event": "deposit",
-  "student_email": "studente@demo.focus360.ai"
-}
-```
-
-Eventi supportati: `deposit`, `withdraw`, `heartbeat`, `maintenance`.
-
-### Variabili ambiente aggiuntive
-
-```text
 PHONEBOX_API_KEY=demo-phonebox-key
 ```
 
-### Implementazione reale Phone Box Smart
-Architettura consigliata:
-- microcontrollore ESP32 o Raspberry Pi Zero 2 W;
-- lettore NFC/RFID PN532 o RC522;
-- sensore presenza vano: microswitch, reed switch o sensore IR;
-- LED RGB per stato libero/occupato/manutenzione;
-- buzzer per conferma deposito;
-- serratura elettromagnetica o servo lock, opzionale;
-- connessione WiFi scolastica o rete IoT/VLAN dedicata;
-- chiamata HTTPS all'endpoint `/api/v1/phonebox/event`.
-
-Flusso reale:
-1. Lo studente appoggia badge NFC.
-2. Il box legge UID o QR studente.
-3. Lo sportello si apre.
-4. Il sensore conferma deposito telefono.
-5. Il dispositivo invia evento `deposit` alla webapp.
-6. La dashboard docente vede il telefono consegnato.
-7. A fine lezione lo studente ritira il telefono e viene inviato `withdraw`.
-
-
-## Novità Enterprise - Gestione credenziali e licenze
-
-### Credenziali utenti
-- Username: sempre l'email dell'utente.
-- Password: generata automaticamente in modo casuale.
-- Le password temporanee sono mostrate nell'esito dell'importazione e possono essere esportate in CSV dal Dirigente o dal SuperAdmin.
-- Al primo accesso l'utente viene obbligato a cambiare password (`must_change_password`).
-- In produzione non conservare password in chiaro: questa versione prototipo mantiene la password temporanea solo per demo/esportazione iniziale.
-
-### CSV studenti aggiornato
-```csv
-cognome;nome;data di nascita;email;telefono;classe;email_genitore
-```
-Se `email_genitore` manca, il sistema crea un account tecnico del tipo `genitore.emailstudente`.
-
-### SuperAdmin
-Il SuperAdmin può ora:
-- modificare piano commerciale, stato pagamento e scadenza licenza;
-- disattivare o riattivare un istituto;
-- eliminare un istituto dal prototipo;
-- esportare le credenziali iniziali degli utenti del tenant.
-
-### Deploy su Render dopo aggiornamento
-Se usi un database già esistente, la webapp esegue una piccola migrazione prototipo per aggiungere `temporary_password` e `must_change_password`. Se il deploy dà problemi, usare **Clear build cache & deploy** e, per SQLite, eliminare il vecchio file database solo in ambiente demo.
-
-## Focus360 AI Enterprise v5
-
-Novità v5:
-- aggiunto pulsante Studente **Partecipa alla lezione** nella dashboard e nel menu;
-- nuova pagina `/join-lesson` con scanner QR da browser e campo manuale per incollare il link QR;
-- flusso corretto: Docente genera QR → Studente scansiona → conferma dati lezione → Attiva Focus → timer/sessione → punti, token, hash blockchain e Passport;
-- il QR resta temporaneo e il token non viene mostrato nelle liste studente per evitare accessi impropri.
-
-### Uso dello studente
-1. Login con `studente@demo.focus360.ai` / `studente123`.
-2. Click su **Partecipa alla lezione**.
-3. Autorizza fotocamera e scansiona il QR mostrato dal docente, oppure incolla il link QR.
-4. Verifica materia/classe e premi **Attiva Focus**.
-5. A fine ora chiudi la sessione e registra minuti/violazioni del prototipo.
-
+Per produzione reale usare PostgreSQL Render al posto di SQLite.
