@@ -223,7 +223,7 @@ def current_user():
 
 @app.context_processor
 def inject_user():
-    return {'me': current_user(), 'plans': PLANS, 'APP_NAME': APP_NAME, 'plan_enabled': plan_enabled if 'plan_enabled' in globals() else None, 'today': date.today()}
+    return {'me': current_user(), 'plans': PLANS, 'APP_NAME': APP_NAME, 'plan_enabled': plan_enabled if 'plan_enabled' in globals() else None, 'module_matrix_for_school': module_matrix_for_school if 'module_matrix_for_school' in globals() else None, 'today': date.today()}
 
 def login_required(role=None):
     def deco(fn):
@@ -461,11 +461,39 @@ def require_feature(feature):
         def wrapper(*args, **kwargs):
             me = current_user()
             if me and me.school_id and not plan_enabled(me.school, feature):
-                flash(f'Modulo non attivo per il piano {me.school.plan}. Contattare il SuperAdmin per abilitarlo.', 'warning')
-                return redirect(url_for('index'))
+                flash(f'Modulo non attivo per il piano {me.school.plan}. Passa a un piano superiore o abilita il modulo dal SuperAdmin.', 'warning')
+                return redirect(url_for('modules_page'))
             return fn(*args, **kwargs)
         return wrapper
     return deco
+
+def plan_badge(school):
+    if not school:
+        return 'BASE'
+    return school.plan or 'BASE'
+
+def module_matrix_for_school(school):
+    plan = plan_badge(school)
+    enabled = enabled_features(school)
+    definitions = [
+        ('qr','QR docente e Focus Mode','Avvio lezione con QR temporaneo, scansione studente, timer Focus e registro base.'),
+        ('dashboard','Dashboard operative','Cruscotti docente, dirigente, studente e genitore.'),
+        ('csv','Upload CSV e credenziali','Importazione docenti/studenti/genitori e password temporanee.'),
+        ('report_csv','Report CSV','Esportazione dati lezione per consiglio di classe e monitoraggio interno.'),
+        ('gamification_base','Gamification base','Punti Focus e FocusToken essenziali.'),
+        ('gamification','Gamification completa','Badge, ranking classi, premi educativi e obiettivi collettivi.'),
+        ('ai','AI Analytics','Rischio distrazione, fasce critiche e analisi per classe/materia.'),
+        ('wellbeing','Digital Wellness Score','Indicatore 0-100 per studente, classe e istituto.'),
+        ('passport','Educational Passport','Portfolio PDF con competenze digitali, PCTO, Educazione civica e badge.'),
+        ('interventi','Piani di intervento','Azioni educative per classi o studenti con criticità digitali.'),
+        ('report_famiglie','Report famiglie','Lettura semplificata per genitori e consensi.'),
+        ('lockers','Smart Locker / Phone Box','Gestione armadietti smart, NFC e deposito telefono.'),
+        ('blockchain','Blockchain badge','Registro immutabile prototipo per badge e certificazioni.'),
+        ('ministeriale','Report ministeriali','Report PTOF, Educazione Civica, PNRR e consiglio di classe.'),
+        ('api','API integrazioni','Endpoint JSON per mobile app, device IoT, phone box e registro.'),
+        ('registro','Integrazione registro elettronico','Modulo predisposto per Argo, Spaggiari, Axios, Nuvola o API scuola.'),
+    ]
+    return [{'key':k,'name':n,'description':d,'enabled':k in enabled} for k,n,d in definitions]
 
 def child_for_parent(parent):
     if not parent or parent.role != 'genitore':
@@ -537,6 +565,36 @@ def change_password():
             return redirect(url_for('index'))
     return render_template('change_password.html')
 
+
+
+def school_identity_key(school):
+    """Chiave logica per evitare duplicazioni nella vista SuperAdmin.
+    Priorità: tenant_slug, codice meccanografico, nome+comune.
+    L'ambiente demo resta sempre visibile una sola volta.
+    """
+    if (school.tenant_slug or '') == 'demo-focus360-enterprise' or 'demo' in (school.name or '').lower():
+        return 'DEMO_FOCUS360'
+    if school.codice_meccanografico:
+        return 'CODICE:' + school.codice_meccanografico.strip().upper()
+    return 'NAME:' + ((school.name or '').strip().lower() + '|' + (school.city or '').strip().lower())
+
+def visible_schools_for_superadmin():
+    """Restituisce solo istituti realmente distinti: una Demo + istituti creati.
+    Evita righe duplicate causate da seed/demo ripetuti o database di test.
+    """
+    rows = School.query.order_by(School.id.asc()).all()
+    seen = set()
+    result = []
+    for school in rows:
+        key = school_identity_key(school)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(school)
+    # Demo sempre in alto; poi istituti creati più recenti prima.
+    result.sort(key=lambda s: (0 if school_identity_key(s) == 'DEMO_FOCUS360' else 1, -s.id))
+    return result
+
 @app.route('/superadmin', methods=['GET','POST'])
 @login_required('superadmin')
 def dashboard_superadmin():
@@ -548,12 +606,18 @@ def dashboard_superadmin():
             return redirect(url_for('dashboard_superadmin'))
         lic_end = request.form.get('license_end')
         license_end = datetime.strptime(lic_end, '%Y-%m-%d').date()
+        codice_clean = request.form.get('codice','').strip().upper()
+        existing_school = School.query.filter_by(codice_meccanografico=codice_clean).first()
+        if existing_school:
+            flash('Esiste già un istituto con questo codice meccanografico. Apri la scheda esistente e modifica i dati invece di crearne una duplicata.', 'warning')
+            return redirect(url_for('dashboard_superadmin'))
+        tenant_slug = codice_clean.lower().replace(' ', '-')
         school=School(
-            name=request.form['name'], codice_meccanografico=request.form.get('codice'), city=request.form.get('city'),
+            name=request.form['name'], codice_meccanografico=codice_clean, city=request.form.get('city'),
             address=request.form.get('address'), fiscal_code=request.form.get('fiscal_code'), pec=request.form.get('pec'),
             billing_email=request.form.get('billing_email'), plan=request.form.get('plan','BASE'),
             payment_status=request.form.get('payment_status','in_attesa'), payment_method=request.form.get('payment_method','bonifico'),
-            license_end=license_end, modules_enabled=sanitize_modules_enabled(request.form.get('plan','BASE'), request.form.get('modules_enabled','')),
+            license_end=license_end, tenant_slug=tenant_slug, modules_enabled=sanitize_modules_enabled(request.form.get('plan','BASE'), request.form.get('modules_enabled','')),
             modules_disabled=sanitize_modules_disabled(request.form.get('plan','BASE'), ','.join(request.form.getlist('modules_disabled'))),
             smart_locker_enabled=bool(request.form.get('smart_locker_enabled')) and request.form.get('plan')=='ENTERPRISE', active=True
         )
@@ -562,7 +626,7 @@ def dashboard_superadmin():
         dirigente=User(school_id=school.id, role='dirigente', surname=request.form.get('ds_surname'), name=request.form.get('ds_name'), email=request.form['ds_email'].lower(), password_hash=generate_password_hash(pwd), temporary_password=pwd, must_change_password=True)
         db.session.add(dirigente); db.session.commit()
         flash(f'Istituto creato. Credenziali dirigente: {dirigente.email} / {pwd}','success')
-    schools=School.query.order_by(School.id.desc()).all()
+    schools=visible_schools_for_superadmin()
     expiring=[s for s in schools if days_to_expiry(s) is not None and days_to_expiry(s) <= 30]
     return render_template('superadmin.html', schools=schools, expiring=expiring, payments=PaymentRecord.query.order_by(PaymentRecord.id.desc()).limit(10).all())
 
@@ -729,7 +793,8 @@ def dashboard_dirigente():
         class_stats[c]['points']+=r.points; class_stats[c]['tokens']+=r.tokens; class_stats[c]['violations']+=r.violations; class_stats[c]['count']+=1
     ai_risk=focus_risk_score(records); att_index=attention_index(records); wellbeing_rows=WellbeingSurvey.query.filter_by(school_id=me.school_id).order_by(WellbeingSurvey.id.desc()).limit(10).all()
     wellness_school=digital_wellness_score(records, wellbeing_rows, PortfolioItem.query.filter_by(school_id=me.school_id).all())
-    return render_template('dirigente.html', teachers=teachers, students=students, records=records, total_tokens=total_tokens, violations=violations, class_stats=class_stats, ai_risk=ai_risk, att_index=att_index, wellbeing_rows=wellbeing_rows, wellness_school=wellness_school)
+    first_student=User.query.filter_by(school_id=me.school_id, role='studente').order_by(User.id).first()
+    return render_template('dirigente.html', teachers=teachers, students=students, records=records, total_tokens=total_tokens, violations=violations, class_stats=class_stats, ai_risk=ai_risk, att_index=att_index, wellbeing_rows=wellbeing_rows, wellness_school=wellness_school, first_student_id=(first_student.id if first_student else None))
 
 @app.route('/upload/<kind>', methods=['GET','POST'])
 @login_required(['dirigente','docente'])
@@ -872,8 +937,10 @@ def award_badges(student):
 @login_required('studente')
 def dashboard_studente():
     me=current_user(); records=FocusRecord.query.filter_by(student_id=me.id).order_by(FocusRecord.id.desc()).all(); badges=Badge.query.filter_by(user_id=me.id).all()
-    risk=focus_risk_score(records); att_index=attention_index(records); surveys=WellbeingSurvey.query.filter_by(student_id=me.id).order_by(WellbeingSurvey.id.desc()).limit(3).all(); passport=educational_passport(me)
-    return render_template('studente.html', records=records, badges=badges, risk=risk, att_index=att_index, surveys=surveys, passport=passport, wellness=passport['wellness'])
+    risk=focus_risk_score(records); att_index=attention_index(records); surveys=WellbeingSurvey.query.filter_by(student_id=me.id).order_by(WellbeingSurvey.id.desc()).limit(3).all()
+    passport=educational_passport(me) if plan_enabled(me.school, 'passport') or plan_enabled(me.school, 'wellbeing') else None
+    wellness=passport['wellness'] if passport else digital_wellness_score(records, surveys, [])
+    return render_template('studente.html', records=records, badges=badges, risk=risk, att_index=att_index, surveys=surveys, passport=passport, wellness=wellness)
 
 @app.route('/genitore')
 @login_required('genitore')
@@ -955,6 +1022,7 @@ def student_passport(student_id):
 
 @app.route('/wellbeing', methods=['GET','POST'])
 @login_required('studente')
+@require_feature('wellbeing')
 def wellbeing():
     me=current_user()
     if request.method=='POST':
@@ -995,6 +1063,7 @@ def lockers():
 
 @app.route('/lockers/<int:box_id>/event', methods=['POST'])
 @login_required(['dirigente','docente'])
+@require_feature('lockers')
 def locker_event(box_id):
     me=current_user(); box=SmartLocker.query.get_or_404(box_id)
     if box.school_id != me.school_id:
@@ -1026,6 +1095,9 @@ def api_phonebox_event():
     box=SmartLocker.query.filter_by(box_code=data.get('box_code')).first()
     if not box:
         return jsonify({'ok':False,'error':'box non trovato'}), 404
+    school = School.query.get(box.school_id)
+    if not plan_enabled(school, 'lockers'):
+        return jsonify({'ok':False,'error':'Modulo Smart Locker non attivo per questo istituto'}), 403
     student=User.query.filter_by(email=(data.get('student_email') or '').lower()).first() if data.get('student_email') else None
     event=data.get('event','heartbeat')
     if event == 'deposit' and student:
@@ -1052,6 +1124,7 @@ def blockchain():
 
 @app.route('/api/v1/focus-summary')
 @login_required(['dirigente','docente'])
+@require_feature('api')
 def api_focus_summary():
     me=current_user(); q=FocusRecord.query.join(Lesson)
     q=q.filter(Lesson.school_id==me.school_id) if me.role=='dirigente' else q.filter(Lesson.teacher_id==me.id)
@@ -1060,6 +1133,7 @@ def api_focus_summary():
 
 @app.route('/report.csv')
 @login_required(['dirigente','docente'])
+@require_feature('report_csv')
 def report_csv():
     me=current_user()
     rows=[]
@@ -1079,6 +1153,7 @@ def report_csv():
 
 @app.route('/api/analytics')
 @login_required(['dirigente','docente'])
+@require_feature('api')
 def api_analytics():
     me=current_user(); q=FocusRecord.query.join(Lesson)
     q=q.filter(Lesson.school_id==me.school_id) if me.role=='dirigente' else q.filter(Lesson.teacher_id==me.id)
@@ -1089,6 +1164,17 @@ def api_analytics():
         data[key]['points']+=r.points; data[key]['violations']+=r.violations; data[key]['minutes']+=r.minutes_focus; data[key]['n']+=1
     return jsonify(data)
 
+
+
+@app.route('/modules')
+@login_required(['dirigente','docente','studente','genitore','superadmin'])
+def modules_page():
+    me=current_user()
+    school = me.school if me and me.school_id else None
+    if me.role == 'superadmin':
+        schools = School.query.order_by(School.name).all()
+        return render_template('modules.html', school=school, schools=schools, matrix=None)
+    return render_template('modules.html', school=school, schools=[], matrix=module_matrix_for_school(school))
 
 @app.route('/plans')
 @login_required(['superadmin','dirigente'])
@@ -1161,6 +1247,7 @@ def ministeriale():
 
 @app.route('/interventi', methods=['GET','POST'])
 @login_required(['dirigente','docente'])
+@require_feature('interventi')
 def interventi():
     me=current_user()
     if request.method=='POST':
@@ -1171,6 +1258,7 @@ def interventi():
 
 @app.route('/api/v1/device-event', methods=['POST'])
 @login_required('studente')
+@require_feature('api')
 def api_device_event():
     me=current_user(); data=request.get_json(silent=True) or {}
     weights={'exit_app':15,'social_open':25,'screen_on':5,'screenshot':10,'multitasking':15,'wifi_checkin':0,'nfc_checkin':0}
@@ -1385,7 +1473,12 @@ def init_db():
     if not User.query.filter_by(email='superadmin@focus360.ai').first():
         su=User(role='superadmin', surname='Super', name='Admin', email='superadmin@focus360.ai', password_hash=generate_password_hash('admin123'), temporary_password='', must_change_password=False)
         db.session.add(su)
-    db.session.commit()
+        db.session.commit()
+    else:
+        db.session.commit()
+    # Mantiene sempre una sola scuola Demo visibile nella console SuperAdmin.
+    if not School.query.filter_by(tenant_slug='demo-focus360-enterprise').first():
+        create_demo_environment(reset=False)
 
 with app.app_context():
     init_db()
