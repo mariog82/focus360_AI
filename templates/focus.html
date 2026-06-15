@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block content %}
+<div class="hero p-4 mb-4"><h1>Modalità Focus attiva</h1><p>Lezione: {{r.lesson.subject}} · Classe {{r.lesson.class_name}}</p></div>
+<div class="row g-3"><div class="col-md-7"><div class="card p-4">
+<h3>Timer lezione</h3><div class="kpi" id="timer">00:00</div><p class="small-muted">Obiettivo: {{r.lesson.duration_minutes}} minuti senza interruzioni.</p>
+<div class="alert alert-success">Mantieni il focus. In produzione l’app mobile controlla notifiche, multitasking e apertura social. Nel prototipo puoi simulare l’esito finale.</div>
+<form method="post"><label>Minuti focus completati</label><input class="form-control mb-2" name="minutes_focus" value="{{r.lesson.duration_minutes}}"><label>Uscite dall'app</label><input class="form-control mb-2" name="exited_app" value="0"><label>Aperture social</label><input class="form-control mb-2" name="opened_social" value="0"><label>Minuti schermo anomali</label><input class="form-control mb-3" name="screen_minutes" value="0"><button class="btn btn-success">Chiudi sessione e certifica</button></form>
+</div></div><div class="col-md-5"><div class="card p-4"><h4>Punteggio previsto</h4><ul><li>1 ora completa focus: +10</li><li>Nessuna interruzione: +5</li><li>Uscita modalità: -15</li><li>Apertura social: -25</li></ul><p class="small-muted">Se il telefono è registrato nella Phone Box Smart, l’evento viene tracciato come evidenza positiva.</p></div></div></div>
+<script>let s=0; setInterval(()=>{s++; let m=String(Math.floor(s/60)).padStart(2,'0'); let sec=String(s%60).padStart(2,'0'); document.getElementById('timer').innerText=m+':'+sec;},1000)</script>
+{% endblock %}
