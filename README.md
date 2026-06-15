@@ -1,31 +1,18 @@
-# Focus360 AI Enterprise v11 – v9 base + multi-plesso
+# Focus360 AI Enterprise v9 - Moduli reali per piano
 
-Questa versione riparte da `focus360_ai_enterprise_v9_real_plan_modules.zip` e applica le modifiche richieste:
+Versione rigenerata con logica applicativa reale per i piani Base, Pro ed Enterprise/PNRR.
 
-## Modifiche principali
+## Novità v9
 
-- Moduli **lockers**, **api** e **registro** disattivati lato piano e lato server.
-- Il piano Enterprise/PNRR mantiene: QR, dashboard, CSV, gamification, AI, Wellness Score, Passport, interventi, report famiglie, blockchain badge, report ministeriali, **multi_plesso** e supporto prioritario.
-- Aggiunta funzione **Multi-plesso** solo per Enterprise/PNRR.
-- Aggiunta tabella `Plesso` con sedi/succursali.
-- Aggiunte route:
-  - `/plessi`
-  - `/plessi/<id>/edit`
-  - `/plessi/<id>/delete`
-- Aggiunto menu “Multi-plesso” per Dirigente Enterprise/PNRR e SuperAdmin.
-- La Demo viene mantenuta e arricchita con due plessi:
-  - Sede centrale
-  - Succursale Tecnologica
-
-## Moduli disattivati
-
-In questa build i seguenti moduli non sono utilizzabili anche se presenti nel codice storico:
-
-- `lockers`
-- `api`
-- `registro`
-
-Sono rimasti nel progetto come predisposizione futura, ma `plan_enabled()` restituisce sempre `False`.
+- Menu dinamici in base al piano dell'istituto.
+- Route protette lato server con `@require_feature`.
+- Pagina `/modules` che mostra moduli attivi e non inclusi.
+- Dashboard Dirigente, Docente, Studente e Genitore adattate al piano.
+- Base: solo QR, Focus Mode, CSV, dashboard e report CSV.
+- Pro: aggiunge AI Analytics, Digital Wellness Score, Passport, gamification completa e interventi.
+- Enterprise/PNRR: aggiunge Smart Locker, blockchain, API, registro elettronico e report ministeriali.
+- API e registro restano disattivabili solo in Enterprise/PNRR.
+- Smart Locker disponibile solo in Enterprise/PNRR e disattivabile dal SuperAdmin.
 
 ## Credenziali demo
 
@@ -35,15 +22,24 @@ Sono rimasti nel progetto come predisposizione futura, ma `plan_enabled()` resti
 - Studente: `studente@demo.focus360.ai` / `studente123`
 - Genitore: `genitore@demo.focus360.ai` / `genitore123`
 
+## Test dei piani
+
+1. Accedi come SuperAdmin.
+2. Crea o modifica un istituto.
+3. Cambia piano Base, Pro o Enterprise.
+4. Accedi come Dirigente/Docente/Studente.
+5. Verifica che il menu mostri solo i moduli del piano.
+6. Apri `/modules` per vedere il riepilogo operativo.
+
 ## Deploy Render
 
-Build Command:
+Build command:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Start Command:
+Start command:
 
 ```bash
 gunicorn app:app
@@ -52,8 +48,9 @@ gunicorn app:app
 Variabili consigliate:
 
 ```env
-SECRET_KEY=una_chiave_lunga_sicura
+SECRET_KEY=chiave-lunga-sicura
 DATABASE_URL=sqlite:///focus360_ai.db
+PHONEBOX_API_KEY=demo-phonebox-key
 ```
 
-Per produzione reale usare PostgreSQL Render.
+Per produzione usare PostgreSQL Render.

@@ -35,9 +35,9 @@ PLANS = {
     },
     'ENTERPRISE': {
         'name':'Enterprise/PNRR',
-        'modules':'Tutto Pro + multi-plesso, blockchain badge, report ministeriali, gestione plessi/sedi e supporto prioritario. Moduli Smart Locker, API e Registro elettronico sono disattivati in questa build.',
+        'modules':'Tutto Pro + Smart Locker/Phone Box, blockchain badge, API, integrazione registro elettronico, report ministeriali, multi-plesso, supporto prioritario.',
         'price':'€ 6.900/anno + IVA; hardware e integrazioni da preventivare',
-        'features':['qr','dashboard','csv','report_csv','gamification_base','ai','gamification','wellbeing','ranking','passport','interventi','report_famiglie','blockchain','ministeriale','multi_plesso','supporto_prioritario']
+        'features':['qr','dashboard','csv','report_csv','gamification_base','ai','gamification','wellbeing','ranking','passport','interventi','report_famiglie','blockchain','lockers','api','registro','ministeriale','multi_plesso','supporto_prioritario']
     }
 }
 ROLES = ['superadmin','dirigente','docente','studente','genitore']
@@ -65,24 +65,9 @@ class School(db.Model):
     smart_locker_enabled = db.Column(db.Boolean, default=True)
     last_expiry_notice_at = db.Column(db.DateTime, nullable=True)
 
-class Plesso(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    school_id = db.Column(db.Integer, db.ForeignKey('school.id'), nullable=False)
-    name = db.Column(db.String(180), nullable=False)
-    code = db.Column(db.String(50), nullable=False)
-    city = db.Column(db.String(120))
-    address = db.Column(db.String(220))
-    referent = db.Column(db.String(160))
-    email = db.Column(db.String(120))
-    phone = db.Column(db.String(60))
-    active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    school = db.relationship('School', backref='plessi')
-
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     school_id = db.Column(db.Integer, db.ForeignKey('school.id'), nullable=True)
-    plesso_id = db.Column(db.Integer, db.ForeignKey('plesso.id'), nullable=True)
     parent_student_id = db.Column(db.Integer, nullable=True)
     role = db.Column(db.String(20), nullable=False)
     surname = db.Column(db.String(80))
@@ -101,7 +86,6 @@ class User(db.Model):
 class Lesson(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     school_id = db.Column(db.Integer, db.ForeignKey('school.id'))
-    plesso_id = db.Column(db.Integer, db.ForeignKey('plesso.id'), nullable=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     class_name = db.Column(db.String(60), nullable=False)
     subject = db.Column(db.String(120), nullable=False)
@@ -435,12 +419,11 @@ def default_features_for_plan(plan):
     return set(PLANS.get(plan or 'BASE', PLANS['BASE']).get('features', []))
 
 ENTERPRISE_ONLY_TOGGLES = {'api', 'registro'}
-HARD_DISABLED_MODULES = {'lockers', 'api', 'registro'}
 ALLOWED_MODULES = {'qr','dashboard','csv','report_csv','gamification_base','ai','gamification','wellbeing','ranking','passport','interventi','report_famiglie','blockchain','lockers','api','registro','ministeriale','multi_plesso','supporto_prioritario'}
 
 def sanitize_modules_enabled(plan, raw):
     values = {x.strip() for x in (raw or '').split(',') if x.strip()}
-    values = (values & ALLOWED_MODULES) - HARD_DISABLED_MODULES
+    values = values & ALLOWED_MODULES
     # API e integrazione registro sono moduli solo Enterprise: non si possono forzare su Base/Pro.
     if plan != 'ENTERPRISE':
         values -= ENTERPRISE_ONLY_TOGGLES
@@ -465,11 +448,9 @@ def enabled_features(school):
     base = default_features_for_plan(school.plan)
     extra = {x.strip() for x in (school.modules_enabled or '').split(',') if x.strip()}
     disabled = {x.strip() for x in (getattr(school, 'modules_disabled', '') or '').split(',') if x.strip()}
-    return ((base | extra) - disabled) - HARD_DISABLED_MODULES
+    return (base | extra) - disabled
 
 def plan_enabled(school, feature):
-    if feature in HARD_DISABLED_MODULES:
-        return False
     if feature == 'lockers' and school and not getattr(school, 'smart_locker_enabled', True):
         return False
     return feature in enabled_features(school)
@@ -509,7 +490,6 @@ def module_matrix_for_school(school):
         ('lockers','Smart Locker / Phone Box','Gestione armadietti smart, NFC e deposito telefono.'),
         ('blockchain','Blockchain badge','Registro immutabile prototipo per badge e certificazioni.'),
         ('ministeriale','Report ministeriali','Report PTOF, Educazione Civica, PNRR e consiglio di classe.'),
-        ('multi_plesso','Multi-plesso','Gestione sedi/plessi, assegnazione utenti e statistiche aggregate per sede.'),
         ('api','API integrazioni','Endpoint JSON per mobile app, device IoT, phone box e registro.'),
         ('registro','Integrazione registro elettronico','Modulo predisposto per Argo, Spaggiari, Axios, Nuvola o API scuola.'),
     ]
@@ -638,8 +618,8 @@ def dashboard_superadmin():
             billing_email=request.form.get('billing_email'), plan=request.form.get('plan','BASE'),
             payment_status=request.form.get('payment_status','in_attesa'), payment_method=request.form.get('payment_method','bonifico'),
             license_end=license_end, tenant_slug=tenant_slug, modules_enabled=sanitize_modules_enabled(request.form.get('plan','BASE'), request.form.get('modules_enabled','')),
-            modules_disabled='lockers,api,registro',
-            smart_locker_enabled=False, active=True
+            modules_disabled=sanitize_modules_disabled(request.form.get('plan','BASE'), ','.join(request.form.getlist('modules_disabled'))),
+            smart_locker_enabled=bool(request.form.get('smart_locker_enabled')) and request.form.get('plan')=='ENTERPRISE', active=True
         )
         db.session.add(school); db.session.commit()
         pwd=random_password()
@@ -665,8 +645,8 @@ def superadmin_update_school(school_id):
     school.payment_status=request.form.get('payment_status', school.payment_status)
     school.payment_method=request.form.get('payment_method', school.payment_method)
     school.modules_enabled=sanitize_modules_enabled(school.plan, request.form.get('modules_enabled', school.modules_enabled or ''))
-    school.modules_disabled='lockers,api,registro'
-    school.smart_locker_enabled=False
+    school.modules_disabled=sanitize_modules_disabled(school.plan, ','.join(request.form.getlist('modules_disabled')))
+    school.smart_locker_enabled=bool(request.form.get('smart_locker_enabled')) and school.plan=='ENTERPRISE'
     school.active = bool(request.form.get('active'))
     lic_end=request.form.get('license_end')
     if lic_end:
@@ -696,7 +676,7 @@ def superadmin_delete_school(school_id):
     school=School.query.get_or_404(school_id)
     sid=school.id
     # Eliminazione fisica per prototipo. In produzione preferire soft delete e conservazione fiscale/log.
-    for model in [InterventionPlan, DeviceEvent, ParentConsent, PaymentRecord, PortfolioItem, Badge, SmartLocker, WellbeingSurvey, FocusRecord, Lesson, BlockchainEvent, User, Plesso]:
+    for model in [InterventionPlan, DeviceEvent, ParentConsent, PaymentRecord, PortfolioItem, Badge, SmartLocker, WellbeingSurvey, FocusRecord, Lesson, BlockchainEvent, User]:
         if hasattr(model, 'school_id'):
             model.query.filter_by(school_id=sid).delete(synchronize_session=False)
     db.session.delete(school)
@@ -1201,78 +1181,6 @@ def modules_page():
 def plans_page():
     return render_template('plans.html')
 
-
-@app.route('/plessi', methods=['GET','POST'])
-@login_required(['dirigente','superadmin'])
-@require_feature('multi_plesso')
-def plessi():
-    me=current_user()
-    school = me.school
-    if me.role == 'superadmin':
-        sid = request.args.get('school_id') or request.form.get('school_id')
-        school = School.query.get(int(sid)) if sid else School.query.filter_by(tenant_slug='demo-focus360-enterprise').first()
-    if not school:
-        flash('Nessun istituto selezionato.', 'warning')
-        return redirect(url_for('dashboard'))
-    if request.method == 'POST':
-        required = ['name','code','city','address']
-        missing = [x for x in required if not request.form.get(x)]
-        if missing:
-            flash('Completa tutti i campi obbligatori del plesso.', 'danger')
-        else:
-            pl = Plesso(
-                school_id=school.id,
-                name=request.form.get('name'),
-                code=request.form.get('code'),
-                city=request.form.get('city'),
-                address=request.form.get('address'),
-                referent=request.form.get('referent'),
-                email=request.form.get('email'),
-                phone=request.form.get('phone'),
-                active=True
-            )
-            db.session.add(pl); db.session.commit()
-            flash('Plesso creato correttamente.', 'success')
-        return redirect(url_for('plessi', school_id=school.id) if me.role=='superadmin' else url_for('plessi'))
-    plessi = Plesso.query.filter_by(school_id=school.id).order_by(Plesso.active.desc(), Plesso.name).all()
-    stats = {}
-    for pl in plessi:
-        stats[pl.id] = {
-            'docenti': User.query.filter_by(school_id=school.id, plesso_id=pl.id, role='docente').count(),
-            'studenti': User.query.filter_by(school_id=school.id, plesso_id=pl.id, role='studente').count(),
-            'lezioni': Lesson.query.filter_by(school_id=school.id, plesso_id=pl.id).count()
-        }
-    schools = School.query.order_by(School.name).all() if me.role=='superadmin' else []
-    return render_template('plessi.html', school=school, plessi=plessi, stats=stats, schools=schools)
-
-@app.route('/plessi/<int:plesso_id>/edit', methods=['GET','POST'])
-@login_required(['dirigente','superadmin'])
-@require_feature('multi_plesso')
-def plesso_edit(plesso_id):
-    me=current_user(); pl=Plesso.query.get_or_404(plesso_id)
-    if me.role != 'superadmin' and pl.school_id != me.school_id:
-        flash('Plesso non accessibile.', 'danger'); return redirect(url_for('dashboard'))
-    if request.method == 'POST':
-        for field in ['name','code','city','address','referent','email','phone']:
-            setattr(pl, field, request.form.get(field))
-        pl.active = bool(request.form.get('active'))
-        db.session.commit(); flash('Plesso aggiornato.', 'success')
-        return redirect(url_for('plessi', school_id=pl.school_id) if me.role=='superadmin' else url_for('plessi'))
-    return render_template('plesso_edit.html', plesso=pl)
-
-@app.route('/plessi/<int:plesso_id>/delete', methods=['POST'])
-@login_required(['dirigente','superadmin'])
-@require_feature('multi_plesso')
-def plesso_delete(plesso_id):
-    me=current_user(); pl=Plesso.query.get_or_404(plesso_id)
-    if me.role != 'superadmin' and pl.school_id != me.school_id:
-        flash('Plesso non accessibile.', 'danger'); return redirect(url_for('dashboard'))
-    if User.query.filter_by(plesso_id=pl.id).count() or Lesson.query.filter_by(plesso_id=pl.id).count():
-        pl.active=False; db.session.commit(); flash('Il plesso contiene utenti/lezioni: è stato disattivato.', 'warning')
-    else:
-        db.session.delete(pl); db.session.commit(); flash('Plesso eliminato.', 'success')
-    return redirect(url_for('plessi', school_id=pl.school_id) if me.role=='superadmin' else url_for('plessi'))
-
 @app.route('/payments', methods=['GET','POST'])
 @login_required('superadmin')
 def payments():
@@ -1394,7 +1302,7 @@ def create_demo_environment(reset=False):
     if existing and reset:
         sid = existing.id
         # Elimina dati demo in ordine semplice. Le tabelle non hanno cascade esplicito.
-        for model in [InterventionPlan, DeviceEvent, ParentConsent, PaymentRecord, PortfolioItem, Badge, SmartLocker, WellbeingSurvey, FocusRecord, Lesson, BlockchainEvent, User, Plesso]:
+        for model in [InterventionPlan, DeviceEvent, ParentConsent, PaymentRecord, PortfolioItem, Badge, SmartLocker, WellbeingSurvey, FocusRecord, Lesson, BlockchainEvent, User]:
             q = model.query
             if hasattr(model, 'school_id'):
                 q = q.filter_by(school_id=sid)
@@ -1418,21 +1326,17 @@ def create_demo_environment(reset=False):
         payment_status='pagato',
         payment_method='bonifico / MEPA',
         tenant_slug='demo-focus360-enterprise',
-        notes='Ambiente demo generato automaticamente per presentazioni commerciali Focus360 AI Enterprise.', modules_enabled='', modules_disabled='lockers,api,registro', smart_locker_enabled=False
+        notes='Ambiente demo generato automaticamente per presentazioni commerciali Focus360 AI Enterprise.', modules_enabled='', modules_disabled='', smart_locker_enabled=True
     )
     db.session.add(school); db.session.flush()
 
-    plesso_centrale = Plesso(school_id=school.id, name='Sede centrale', code='CENTRALE', city='Barcellona Pozzo di Gotto', address='Via Innovazione Digitale 1', referent='Dirigente Demo', email='centrale@demo.focus360.ai', phone='0900000000')
-    plesso_succursale = Plesso(school_id=school.id, name='Succursale Tecnologica', code='SUCC-TECH', city='Barcellona Pozzo di Gotto', address='Via Laboratori 12', referent='Prof. Marco Rossi', email='succursale@demo.focus360.ai', phone='0900000002')
-    db.session.add_all([plesso_centrale, plesso_succursale]); db.session.flush()
-
-    dirigente = upsert_user('dirigente@demo.focus360.ai', 'dirigente123', school_id=school.id, plesso_id=plesso_centrale.id, role='dirigente', surname='Verdi', name='Laura', phone='0900000001')
+    dirigente = upsert_user('dirigente@demo.focus360.ai', 'dirigente123', school_id=school.id, role='dirigente', surname='Verdi', name='Laura', phone='0900000001')
     docenti = [
-        upsert_user('docente@demo.focus360.ai', 'docente123', school_id=school.id, plesso_id=plesso_centrale.id, role='docente', surname='Rossi', name='Marco', discipline='Informatica', class_name='3A INF', phone='0900000100'),
-        upsert_user('docente.matematica@demo.focus360.ai', 'docente123', school_id=school.id, plesso_id=plesso_centrale.id, role='docente', surname='Bianchi', name='Anna', discipline='Matematica', class_name='4A INF', phone='0900000101'),
-        upsert_user('docente.sistemi@demo.focus360.ai', 'docente123', school_id=school.id, plesso_id=plesso_centrale.id, role='docente', surname='Costa', name='Giuseppe', discipline='Sistemi e reti', class_name='5A INF', phone='0900000102'),
-        upsert_user('docente.inglese@demo.focus360.ai', 'docente123', school_id=school.id, plesso_id=plesso_succursale.id, role='docente', surname='Greco', name='Elena', discipline='Inglese', class_name='3B INF', phone='0900000103'),
-        upsert_user('docente.civica@demo.focus360.ai', 'docente123', school_id=school.id, plesso_id=plesso_succursale.id, role='docente', surname='Arena', name='Francesca', discipline='Educazione civica', class_name='4B INF', phone='0900000104'),
+        upsert_user('docente@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Rossi', name='Marco', discipline='Informatica', class_name='3A INF', phone='0900000100'),
+        upsert_user('docente.matematica@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Bianchi', name='Anna', discipline='Matematica', class_name='4A INF', phone='0900000101'),
+        upsert_user('docente.sistemi@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Costa', name='Giuseppe', discipline='Sistemi e reti', class_name='5A INF', phone='0900000102'),
+        upsert_user('docente.inglese@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Greco', name='Elena', discipline='Inglese', class_name='3B INF', phone='0900000103'),
+        upsert_user('docente.civica@demo.focus360.ai', 'docente123', school_id=school.id, role='docente', surname='Arena', name='Francesca', discipline='Educazione civica', class_name='4B INF', phone='0900000104'),
     ]
 
     classes = ['3A INF','3B INF','4A INF','4B INF','5A INF']
@@ -1446,11 +1350,11 @@ def create_demo_environment(reset=False):
             surname = cognomi[(idx*2+i) % len(cognomi)]
             email = 'studente@demo.focus360.ai' if idx == 1 else f'studente{idx:03d}@demo.focus360.ai'
             pwd = 'studente123' if idx == 1 else 'studenti123'
-            st = upsert_user(email, pwd, school_id=school.id, plesso_id=(plesso_centrale.id if c in ['3A INF','4A INF','5A INF'] else plesso_succursale.id), role='studente', surname=surname, name=name, class_name=c, birthdate=f'200{random.randint(7,9)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}', phone=f'333000{idx:04d}')
+            st = upsert_user(email, pwd, school_id=school.id, role='studente', surname=surname, name=name, class_name=c, birthdate=f'200{random.randint(7,9)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}', phone=f'333000{idx:04d}')
             studenti.append(st)
             parent_email = 'genitore@demo.focus360.ai' if idx == 1 else f'genitore.studente{idx:03d}@demo.focus360.ai'
             parent_pwd = 'genitore123' if idx == 1 else 'genitori123'
-            upsert_user(parent_email, parent_pwd, school_id=school.id, plesso_id=st.plesso_id, parent_student_id=st.id, role='genitore', surname='Genitore', name=f'{name} {surname}', class_name=c, phone=f'333900{idx:04d}')
+            upsert_user(parent_email, parent_pwd, school_id=school.id, parent_student_id=st.id, role='genitore', surname='Genitore', name=f'{name} {surname}', class_name=c, phone=f'333900{idx:04d}')
             idx += 1
     db.session.flush()
 
@@ -1467,7 +1371,7 @@ def create_demo_environment(reset=False):
             teacher = docenti[ci % len(docenti)]
             subject = subjects[ci % len(subjects)]
             raw = secrets.token_urlsafe(16)
-            lesson = Lesson(school_id=school.id, plesso_id=(plesso_centrale.id if c in ['3A INF','4A INF','5A INF'] else plesso_succursale.id), teacher_id=teacher.id, class_name=c, subject=subject, started_at=lesson_date.replace(hour=8+(ci%5), minute=0, second=0, microsecond=0), duration_minutes=60, qr_token_hash=sha(raw), qr_expires_at=lesson_date+timedelta(minutes=10), status='chiusa')
+            lesson = Lesson(school_id=school.id, teacher_id=teacher.id, class_name=c, subject=subject, started_at=lesson_date.replace(hour=8+(ci%5), minute=0, second=0, microsecond=0), duration_minutes=60, qr_token_hash=sha(raw), qr_expires_at=lesson_date+timedelta(minutes=10), status='chiusa')
             db.session.add(lesson); db.session.flush()
             class_students=[s for s in studenti if s.class_name==c]
             for st in class_students:
@@ -1528,24 +1432,6 @@ def create_demo_route():
         flash('Ambiente demo Enterprise creato con utenti, classi, report, Wellness Score ed Educational Passport.', 'success')
     return redirect(url_for('dashboard_superadmin'))
 
-
-def ensure_demo_plessi():
-    demo = School.query.filter_by(tenant_slug='demo-focus360-enterprise').first()
-    if not demo:
-        return
-    # Forza in questa build la disattivazione di lockers, API e registro anche sulla Demo esistente.
-    demo.modules_disabled = 'lockers,api,registro'
-    demo.smart_locker_enabled = False
-    if not Plesso.query.filter_by(school_id=demo.id).first():
-        centrale = Plesso(school_id=demo.id, name='Sede centrale', code='CENTRALE', city=demo.city or 'Barcellona Pozzo di Gotto', address=demo.address or 'Via Innovazione Digitale 1', referent='Dirigente Demo', email='centrale@demo.focus360.ai', phone='0900000000')
-        succ = Plesso(school_id=demo.id, name='Succursale Tecnologica', code='SUCC-TECH', city=demo.city or 'Barcellona Pozzo di Gotto', address='Via Laboratori 12', referent='Prof. Marco Rossi', email='succursale@demo.focus360.ai', phone='0900000002')
-        db.session.add_all([centrale, succ]); db.session.flush()
-        for u in User.query.filter_by(school_id=demo.id).all():
-            u.plesso_id = centrale.id if (u.class_name in [None,'','3A INF','4A INF','5A INF'] or u.role=='dirigente') else succ.id
-        for l in Lesson.query.filter_by(school_id=demo.id).all():
-            l.plesso_id = centrale.id if l.class_name in ['3A INF','4A INF','5A INF'] else succ.id
-    db.session.commit()
-
 @app.cli.command('init-db')
 def init_db_cmd():
     init_db(); print('Database inizializzato')
@@ -1559,8 +1445,6 @@ def ensure_runtime_columns():
             "ALTER TABLE user ADD COLUMN temporary_password VARCHAR(80)",
             "ALTER TABLE user ADD COLUMN must_change_password BOOLEAN DEFAULT 1",
             "ALTER TABLE user ADD COLUMN parent_student_id INTEGER",
-            "ALTER TABLE user ADD COLUMN plesso_id INTEGER",
-            "ALTER TABLE lesson ADD COLUMN plesso_id INTEGER",
             "ALTER TABLE school ADD COLUMN modules_enabled TEXT DEFAULT ''",
             "ALTER TABLE school ADD COLUMN modules_disabled TEXT DEFAULT ''",
             "ALTER TABLE school ADD COLUMN smart_locker_enabled BOOLEAN DEFAULT 1",
@@ -1571,8 +1455,6 @@ def ensure_runtime_columns():
             'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS temporary_password VARCHAR(80)',
             'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT TRUE',
             'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS parent_student_id INTEGER',
-            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS plesso_id INTEGER',
-            'ALTER TABLE lesson ADD COLUMN IF NOT EXISTS plesso_id INTEGER',
             "ALTER TABLE school ADD COLUMN IF NOT EXISTS modules_enabled TEXT DEFAULT ''",
             "ALTER TABLE school ADD COLUMN IF NOT EXISTS modules_disabled TEXT DEFAULT ''",
             'ALTER TABLE school ADD COLUMN IF NOT EXISTS smart_locker_enabled BOOLEAN DEFAULT TRUE',
@@ -1597,7 +1479,6 @@ def init_db():
     # Mantiene sempre una sola scuola Demo visibile nella console SuperAdmin.
     if not School.query.filter_by(tenant_slug='demo-focus360-enterprise').first():
         create_demo_environment(reset=False)
-    ensure_demo_plessi()
 
 with app.app_context():
     init_db()
