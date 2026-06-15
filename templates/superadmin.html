@@ -27,8 +27,9 @@
         <select class="form-select mb-2" name="payment_status" required><option>in_attesa</option><option>pagato</option><option>scaduto</option></select>
         <select class="form-select mb-2" name="payment_method" required><option>bonifico</option><option>MEPA</option><option>carta</option><option>mandato</option></select>
         <input class="form-control mb-2" type="date" name="license_end" title="Scadenza licenza" required>
-        <input class="form-control mb-2" name="modules_enabled" placeholder="Moduli extra opzionali: ai,lockers,blockchain,api">
-        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="smart_locker_enabled" value="1" checked><label class="form-check-label">Smart locker/Phone Box abilitato</label></div>
+        <input class="form-control mb-2" name="modules_enabled" placeholder="Moduli extra opzionali. API/registro solo Enterprise">
+        <div class="border rounded p-2 mb-2 bg-light small"><strong>Solo Enterprise/PNRR:</strong><br><label class="me-3"><input type="checkbox" name="modules_disabled" value="api"> Disabilita API</label><label><input type="checkbox" name="modules_disabled" value="registro"> Disabilita integrazione registro</label></div>
+        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="smart_locker_enabled" value="1" checked><label class="form-check-label">Smart locker/Phone Box abilitato <span class="small-muted">(solo Enterprise)</span></label></div>
         <div class="row"><div class="col-md-6"><input class="form-control mb-2" name="ds_name" placeholder="Nome dirigente" required></div><div class="col-md-6"><input class="form-control mb-2" name="ds_surname" placeholder="Cognome dirigente" required></div></div>
         <input class="form-control mb-2" name="ds_email" placeholder="Email dirigente" required>
         <button class="btn btn-primary">Crea tenant</button>
@@ -42,7 +43,7 @@
       <tr>
         <td><strong>{{s.name}}</strong><br><span class="small-muted">{{s.city}} · {{s.codice_meccanografico or ''}}</span><br><span class="brand-badge">{{s.plan}}</span></td>
         <td>{{s.license_end}}<br><span class="small-muted">Pagamento: {{s.payment_status}}<br>Avviso: {{s.last_expiry_notice_at or 'mai'}}</span></td>
-        <td>{% if s.active %}<span class="badge bg-success">attivo</span>{% else %}<span class="badge bg-secondary">disattivato</span>{% endif %}<br>{% if s.smart_locker_enabled %}<span class="badge bg-primary mt-1">locker ON</span>{% else %}<span class="badge bg-danger mt-1">locker OFF</span>{% endif %}</td>
+        <td>{% if s.active %}<span class="badge bg-success">attivo</span>{% else %}<span class="badge bg-secondary">disattivato</span>{% endif %}<br>{% if s.smart_locker_enabled %}<span class="badge bg-primary mt-1">locker ON</span>{% else %}<span class="badge bg-danger mt-1">locker OFF</span>{% endif %}<br><span class="badge bg-light text-dark mt-1">API: {% if s.plan=='ENTERPRISE' and 'api' not in (s.modules_disabled or '') %}ON{% else %}OFF{% endif %}</span> <span class="badge bg-light text-dark mt-1">Registro: {% if s.plan=='ENTERPRISE' and 'registro' not in (s.modules_disabled or '') %}ON{% else %}OFF{% endif %}</span></td>
         <td>
           <form method="post" action="/superadmin/school/{{s.id}}/update" class="border rounded p-2 mb-2">
             <div class="row g-1">
@@ -57,7 +58,12 @@
               <div class="col-6"><select class="form-select form-select-sm" name="payment_status"><option {% if s.payment_status=='in_attesa' %}selected{% endif %}>in_attesa</option><option {% if s.payment_status=='pagato' %}selected{% endif %}>pagato</option><option {% if s.payment_status=='scaduto' %}selected{% endif %}>scaduto</option></select></div>
               <div class="col-6"><select class="form-select form-select-sm" name="payment_method"><option {% if s.payment_method=='bonifico' %}selected{% endif %}>bonifico</option><option {% if s.payment_method=='MEPA' %}selected{% endif %}>MEPA</option><option {% if s.payment_method=='carta' %}selected{% endif %}>carta</option><option {% if s.payment_method=='mandato' %}selected{% endif %}>mandato</option></select></div>
               <div class="col-6"><input class="form-control form-control-sm" type="date" name="license_end" value="{{s.license_end}}"></div>
-              <div class="col-12"><input class="form-control form-control-sm" name="modules_enabled" value="{{s.modules_enabled or ''}}" placeholder="Moduli extra"></div>
+              <div class="col-12"><input class="form-control form-control-sm" name="modules_enabled" value="{{s.modules_enabled or ''}}" placeholder="Moduli extra. API/registro solo Enterprise"></div>
+              <div class="col-12 small border rounded p-2 bg-light">
+                <strong>Disabilitazioni solo Enterprise/PNRR</strong><br>
+                <label class="me-3"><input type="checkbox" name="modules_disabled" value="api" {% if 'api' in (s.modules_disabled or '') %}checked{% endif %} {% if s.plan != 'ENTERPRISE' %}disabled{% endif %}> API disabilitata</label>
+                <label><input type="checkbox" name="modules_disabled" value="registro" {% if 'registro' in (s.modules_disabled or '') %}checked{% endif %} {% if s.plan != 'ENTERPRISE' %}disabled{% endif %}> Registro disabilitato</label>
+              </div>
               <div class="col-12"><textarea class="form-control form-control-sm" name="notes" placeholder="Note">{{s.notes or ''}}</textarea></div>
               <div class="col-6 form-check ms-2"><input class="form-check-input" type="checkbox" name="active" value="1" {% if s.active %}checked{% endif %}><label class="form-check-label small">Istituto attivo</label></div>
               <div class="col-5 form-check"><input class="form-check-input" type="checkbox" name="smart_locker_enabled" value="1" {% if s.smart_locker_enabled %}checked{% endif %}><label class="form-check-label small">Smart locker</label></div>

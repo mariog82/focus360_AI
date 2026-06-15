@@ -1,5 +1,17 @@
 {% extends 'base.html' %}{% block content %}
-<div class="hero p-4 mb-4"><h1>Differenza tra pacchetti</h1><p>Separazione commerciale dei moduli Focus360 AI.</p></div>
+<div class="hero p-4 mb-4"><h1>Pacchetti e prezzi consigliati</h1><p>Distribuzione commerciale sostenibile per scuole secondarie, con moduli coerenti e scalabili.</p></div>
 <div class="row g-3">{% for code,p in plans.items() %}<div class="col-lg-4"><div class="card p-3 h-100"><h3>{{p.name}}</h3><div class="kpi">{{p.price}}</div><p>{{p.modules}}</p><h6>Funzioni abilitate</h6><ul>{% for f in p.features %}<li>{{f}}</li>{% endfor %}</ul></div></div>{% endfor %}</div>
-<div class="card p-3 mt-3"><h4>Sintesi operativa</h4><table class="table"><tr><th>Modulo</th><th>Base</th><th>Pro</th><th>Enterprise/PNRR</th></tr><tr><td>QR docente + focus studente</td><td>✔</td><td>✔</td><td>✔</td></tr><tr><td>Upload CSV docenti/studenti</td><td>✔</td><td>✔</td><td>✔</td></tr><tr><td>AI Analytics e Wellness Score</td><td>—</td><td>✔</td><td>✔</td></tr><tr><td>Educational Passport</td><td>—</td><td>✔</td><td>✔</td></tr><tr><td>Smart Locker / Phone Box</td><td>—</td><td>—</td><td>✔, disattivabile dal SuperAdmin</td></tr><tr><td>Blockchain badge, API, report ministeriali</td><td>—</td><td>parziale</td><td>✔</td></tr></table></div>
+<div class="card p-3 mt-3"><h4>Redistribuzione dei moduli</h4><table class="table table-bordered align-middle"><tr><th>Modulo</th><th>Base</th><th>Pro</th><th>Enterprise/PNRR</th></tr>
+<tr><td>QR docente + Focus Mode studente</td><td>✔</td><td>✔</td><td>✔</td></tr>
+<tr><td>Upload CSV docenti/studenti/genitori e credenziali</td><td>✔</td><td>✔</td><td>✔</td></tr>
+<tr><td>Dashboard docente/dirigente e report CSV</td><td>✔</td><td>✔</td><td>✔</td></tr>
+<tr><td>Gamification completa, ranking, badge</td><td>base</td><td>✔</td><td>✔</td></tr>
+<tr><td>AI Analytics e Digital Wellness Score</td><td>—</td><td>✔</td><td>✔</td></tr>
+<tr><td>Educational Passport PDF</td><td>—</td><td>✔</td><td>✔</td></tr>
+<tr><td>Piani di intervento e report famiglie</td><td>—</td><td>✔</td><td>✔</td></tr>
+<tr><td>Smart Locker / Phone Box</td><td>—</td><td>—</td><td>✔, disattivabile</td></tr>
+<tr><td>Blockchain badge e report ministeriali</td><td>—</td><td>—</td><td>✔</td></tr>
+<tr><td>API e integrazione registro elettronico</td><td>—</td><td>—</td><td>✔, disattivabili solo in Enterprise</td></tr>
+</table></div>
+<div class="card p-3 mt-3"><h4>Stima prezzo corretta</h4><p>Prezzi consigliati: <strong>Base € 1.200/anno + IVA</strong>, <strong>Pro € 2.900/anno + IVA</strong>, <strong>Enterprise/PNRR € 6.900/anno + IVA</strong>. Smart locker, installazione hardware, integrazione con registro elettronico e formazione avanzata vanno quotati separatamente.</p><p class="small-muted">Ragionamento commerciale: il Base deve restare accessibile per una scuola che vuole partire senza hardware; il Pro è il piano più vendibile perché include il valore distintivo, cioè Wellness Score ed Educational Passport; Enterprise è pensato per scuole tecniche, reti di scuole e progetti PNRR.</p></div>
 {% endblock %}
