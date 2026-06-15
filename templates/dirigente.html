@@ -17,6 +17,6 @@
   {% if plan_enabled(me.school,'wellbeing') %}<a class="btn btn-success" href="/wellness-score">Digital Wellness Score</a>{% endif %}
   {% if plan_enabled(me.school,'passport') %}<a class="btn btn-outline-secondary" href="/passport/{{ first_student_id if first_student_id else 0 }}">Educational Passport</a>{% endif %}
 </p>
-<div class="card p-3 mb-3"><h4>Moduli del piano {{me.school.plan}}</h4><div class="row g-2">{% for m in module_matrix_for_school(me.school) %}<div class="col-md-3"><span class="module-chip d-block text-center {% if m.enabled %}bg-success text-white{% else %}bg-light text-muted{% endif %}">{{m.name}}</span></div>{% endfor %}</div></div>
+<div class="card p-3 mb-3"><h4>Moduli del piano {{me.school.plan}}</h4><div class="row g-2">{% for m in active_module_matrix_for_school(me.school) %}<div class="col-md-3"><span class="module-chip d-block text-center bg-success text-white">{{m.name}}</span></div>{% endfor %}</div></div>
 <div class="card p-3"><h4>Classi virtuose</h4><table class="table"><tr><th>Classe</th><th>Punti</th><th>Token</th><th>Violazioni</th>{% if plan_enabled(me.school,'ranking') %}<th>Ranking</th>{% endif %}</tr>{% for c,v in class_stats.items() %}<tr><td>{{c}}</td><td>{{v.points}}</td><td>{{v.tokens}}</td><td>{{v.violations}}</td>{% if plan_enabled(me.school,'ranking') %}<td>{{loop.index}}</td>{% endif %}</tr>{% endfor %}</table></div>
 {% endblock %}
