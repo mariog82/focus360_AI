@@ -223,7 +223,7 @@ def current_user():
 
 @app.context_processor
 def inject_user():
-    return {'me': current_user(), 'plans': PLANS, 'APP_NAME': APP_NAME, 'plan_enabled': plan_enabled if 'plan_enabled' in globals() else None, 'module_matrix_for_school': module_matrix_for_school if 'module_matrix_for_school' in globals() else None, 'today': date.today()}
+    return {'me': current_user(), 'plans': PLANS, 'APP_NAME': APP_NAME, 'plan_enabled': plan_enabled if 'plan_enabled' in globals() else None, 'module_matrix_for_school': module_matrix_for_school if 'module_matrix_for_school' in globals() else None, 'active_module_matrix_for_school': active_module_matrix_for_school if 'active_module_matrix_for_school' in globals() else None, 'today': date.today()}
 
 def login_required(role=None):
     def deco(fn):
@@ -494,6 +494,13 @@ def module_matrix_for_school(school):
         ('registro','Integrazione registro elettronico','Modulo predisposto per Argo, Spaggiari, Axios, Nuvola o API scuola.'),
     ]
     return [{'key':k,'name':n,'description':d,'enabled':k in enabled} for k,n,d in definitions]
+
+
+def active_module_matrix_for_school(school):
+    """Restituisce solo i moduli realmente utilizzabili dall'istituto.
+    I moduli non inclusi/disattivati non vengono mostrati come label nelle dashboard utenti.
+    """
+    return [m for m in module_matrix_for_school(school) if m.get('enabled')]
 
 def child_for_parent(parent):
     if not parent or parent.role != 'genitore':
