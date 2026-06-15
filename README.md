@@ -34,3 +34,12 @@ Bianchi;Luca;2009-04-15;luca.bianchi@studenti.it;3334445555;4A;genitore@email.it
 - Docente: `docente@demo.focus360.ai` / `docente123`
 - Studente: `studente@demo.focus360.ai` / `studente123`
 - Genitore: `genitore@demo.focus360.ai` / `genitore123`
+
+## Patch beta v12.1 - Passport e alert
+
+Correzioni applicate:
+- Corretto errore 500 del Passport: il template non usa più `data.items`, che in Jinja può essere interpretato come metodo dei dizionari, ma `data.portfolio_items`.
+- Aggiunto campo `portfolio_items` alla funzione `educational_passport()` mantenendo compatibilità con `items`.
+- Corretto accesso Passport da Digital Wellness Score anche per Studente e Genitore.
+- Corretto recupero figlio per Genitore nella pagina Wellness usando `child_for_parent()`.
+- Migliorata visualizzazione degli alert Bootstrap, con categorie validate e pulsante di chiusura.

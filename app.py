@@ -377,7 +377,7 @@ def educational_passport(student):
         'items': [i.title for i in items],
     }
     passport_hash = sha(json.dumps(payload, sort_keys=True, ensure_ascii=False))
-    return {'student':student,'records':records,'badges':badges,'items':items,'wellness':wellness,'focus_hours':total_focus_hours,'tokens':total_tokens,'categories':categories,'passport_hash':passport_hash}
+    return {'student':student,'records':records,'badges':badges,'items':items,'portfolio_items':items,'wellness':wellness,'focus_hours':total_focus_hours,'tokens':total_tokens,'categories':categories,'passport_hash':passport_hash}
 
 
 def pdf_escape(txt):
@@ -989,7 +989,7 @@ def wellness_score_page():
     if me.role=='studente':
         students=[me]
     elif me.role=='genitore':
-        child=User.query.filter_by(email=me.email.replace('genitore.','',1)).first()
+        child=child_for_parent(me)
         students=[child] if child else []
     else:
         students=User.query.filter_by(school_id=me.school_id, role='studente').order_by(User.class_name, User.surname).all()
