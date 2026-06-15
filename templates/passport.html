@@ -1,9 +1,27 @@
-{% extends 'base.html' %}{% block content %}
-<div class="hero p-4 mb-4"><h1>Focus360 AI Educational Passport™</h1><p>Portfolio digitale verificabile per focus, cittadinanza digitale, PCTO, AI literacy, cybersecurity e soft skills.</p><a class="btn btn-light" href="{{ url_for('student_passport_download', student_id=data.student.id) if can_add else url_for('my_passport_download') }}">Scarica Passport PDF</a></div>
-<div class="row g-3 mb-3"><div class="col-md-3"><div class="card p-3"><div class="small-muted">Studente</div><h4>{{data.student.surname}} {{data.student.name}}</h4><div>{{data.student.class_name}}</div></div></div><div class="col-md-3"><div class="card p-3"><div class="small-muted">Digital Wellness</div><div class="kpi">{{data.wellness.score}}</div><span class="brand-badge">{{data.wellness.level}}</span></div></div><div class="col-md-3"><div class="card p-3"><div class="small-muted">Ore Focus</div><div class="kpi">{{data.focus_hours}}</div></div></div><div class="col-md-3"><div class="card p-3"><div class="small-muted">FocusToken</div><div class="kpi">{{data.tokens}}</div></div></div></div>
+{% extends 'base.html' %}
+{% block content %}
+<div class="hero p-4 mb-4">
+  <h1>Focus360 AI Educational Passport™</h1>
+  <p>Portfolio digitale verificabile per focus, cittadinanza digitale, PCTO, AI literacy, cybersecurity e soft skills.</p>
+  <a class="btn btn-light" href="{{ url_for('student_passport_download', student_id=data.student.id) if can_add else url_for('my_passport_download') }}">Scarica Passport PDF</a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card p-3"><div class="small-muted">Studente</div><h4>{{data.student.surname}} {{data.student.name}}</h4><div>{{data.student.class_name}}</div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="small-muted">Digital Wellness</div><div class="kpi">{{data.wellness.score}}</div><span class="brand-badge">{{data.wellness.level}}</span></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="small-muted">Ore Focus</div><div class="kpi">{{data.focus_hours}}</div></div></div>
+  <div class="col-md-3"><div class="card p-3"><div class="small-muted">FocusToken</div><div class="kpi">{{data.tokens}}</div></div></div>
+</div>
+
 <div class="card p-3 mb-3"><h4>Hash passaporto</h4><code>{{data.passport_hash}}</code><p class="small-muted mt-2">Hash dimostrativo: permette di verificare l'integrità del portfolio senza rendere pubblico il dato personale.</p></div>
+
 <div class="card p-3 mb-3"><h4>Badge e certificazioni</h4>{% for b in data.badges %}<span class="brand-badge me-2">{{b.name}}</span>{% else %}<p class="small-muted">Nessun badge ancora.</p>{% endfor %}</div>
-<div class="card p-3 mb-3"><h4>Competenze per area</h4><table class="table"><tr><th>Area</th><th>Elementi</th><th>Ore</th><th>Punteggio</th></tr>{% for cat,v in data.categories.items() %}<tr><td>{{cat}}</td><td>{{v.count}}</td><td>{{v.hours}}</td><td>{{v.score}}</td></tr>{% endfor %}</table></div>
-{% if can_add %}<div class="card p-3 mb-3"><h4>Aggiungi elemento al Passport</h4><form method="post" class="row g-2"><div class="col-md-3"><select name="category" class="form-select"><option>Digital Citizenship</option><option>PCTO</option><option>Educazione Civica</option><option>Cybersecurity</option><option>AI Literacy</option><option>Soft Skills</option></select></div><div class="col-md-3"><input name="title" class="form-control" placeholder="Titolo" required></div><div class="col-md-2"><input name="hours" type="number" step="0.5" class="form-control" placeholder="Ore"></div><div class="col-md-2"><input name="score" type="number" class="form-control" placeholder="Score"></div><div class="col-md-12"><textarea name="description" class="form-control" placeholder="Descrizione/evidenza"></textarea></div><div class="col-md-12"><button class="btn btn-primary">Valida e registra su ledger</button></div></form></div>{% endif %}
-<div class="card p-3"><h4>Timeline portfolio</h4><table class="table table-striped"><tr><th>Data</th><th>Area</th><th>Titolo</th><th>Ore</th><th>Validatore</th><th>Hash</th></tr>{% for i in data.items %}<tr><td>{{i.created_at.date()}}</td><td>{{i.category}}</td><td>{{i.title}}</td><td>{{i.hours}}</td><td>{{i.validator}}</td><td><small>{{i.evidence_hash[:12] if i.evidence_hash}}</small></td></tr>{% endfor %}</table></div>
+
+<div class="card p-3 mb-3"><h4>Competenze per area</h4><table class="table"><tr><th>Area</th><th>Elementi</th><th>Ore</th><th>Punteggio</th></tr>{% for cat,v in data.categories.items() %}<tr><td>{{cat}}</td><td>{{v.count}}</td><td>{{v.hours}}</td><td>{{v.score}}</td></tr>{% else %}<tr><td colspan="4" class="text-muted">Nessuna competenza ancora registrata.</td></tr>{% endfor %}</table></div>
+
+{% if can_add %}
+<div class="card p-3 mb-3"><h4>Aggiungi elemento al Passport</h4><form method="post" class="row g-2"><div class="col-md-3"><select name="category" class="form-select"><option>Digital Citizenship</option><option>PCTO</option><option>Educazione Civica</option><option>Cybersecurity</option><option>AI Literacy</option><option>Soft Skills</option></select></div><div class="col-md-3"><input name="title" class="form-control" placeholder="Titolo" required></div><div class="col-md-2"><input name="hours" type="number" step="0.5" class="form-control" placeholder="Ore"></div><div class="col-md-2"><input name="score" type="number" class="form-control" placeholder="Score"></div><div class="col-md-12"><textarea name="description" class="form-control" placeholder="Descrizione/evidenza"></textarea></div><div class="col-md-12"><button class="btn btn-primary">Valida e registra su ledger</button></div></form></div>
+{% endif %}
+
+<div class="card p-3"><h4>Timeline portfolio</h4><table class="table table-striped"><tr><th>Data</th><th>Area</th><th>Titolo</th><th>Ore</th><th>Validatore</th><th>Hash</th></tr>{% for i in data.portfolio_items %}<tr><td>{{i.created_at.date() if i.created_at else ''}}</td><td>{{i.category}}</td><td>{{i.title}}</td><td>{{i.hours}}</td><td>{{i.validator}}</td><td><small>{{i.evidence_hash[:12] if i.evidence_hash else ''}}</small></td></tr>{% else %}<tr><td colspan="6" class="text-muted">Nessun elemento nel portfolio.</td></tr>{% endfor %}</table></div>
 {% endblock %}
