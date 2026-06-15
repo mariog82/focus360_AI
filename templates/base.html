@@ -9,11 +9,12 @@
   {% if plan_enabled(me.school,'lockers') %}<li class="nav-item"><a class="nav-link" href="/lockers">Smart Locker</a></li>{% endif %}
   {% if plan_enabled(me.school,'report_csv') %}<li class="nav-item"><a class="nav-link" href="/report.csv">Report CSV</a></li>{% endif %}
   {% if plan_enabled(me.school,'ministeriale') %}<li class="nav-item"><a class="nav-link" href="/ministeriale">Report ministeriale</a></li>{% endif %}
+  {% if plan_enabled(me.school,'multi_plesso') %}<li class="nav-item"><a class="nav-link" href="/plessi">Multi-plesso</a></li>{% endif %}
   {% if plan_enabled(me.school,'interventi') %}<li class="nav-item"><a class="nav-link" href="/interventi">Interventi</a></li>{% endif %}
 {% endif %}
 {% if me.role == 'dirigente' %}<li class="nav-item"><a class="nav-link" href="/dirigente/users">Utenti</a></li>{% endif %}
 {% if me.role in ['dirigente','superadmin'] %}{% if me.role == 'superadmin' or plan_enabled(me.school,'blockchain') %}<li class="nav-item"><a class="nav-link" href="/blockchain">Blockchain</a></li>{% endif %}<li class="nav-item"><a class="nav-link" href="/plans">Piani</a></li>{% endif %}
-{% if me.role == 'superadmin' %}<li class="nav-item"><a class="nav-link" href="/payments">Pagamenti</a></li>{% endif %}
+{% if me.role == 'superadmin' %}<li class="nav-item"><a class="nav-link" href="/payments">Pagamenti</a></li><li class="nav-item"><a class="nav-link" href="/plessi">Multi-plesso</a></li>{% endif %}
 {% if me.role in ['dirigente','genitore'] and (me.role=='genitore' or plan_enabled(me.school,'report_famiglie')) %}<li class="nav-item"><a class="nav-link" href="/consensi">Consensi</a></li>{% endif %}
 {% if me.role == 'studente' %}<li class="nav-item"><a class="nav-link" href="/join-lesson">Partecipa alla lezione</a></li>{% endif %}
 {% if me.role in ['studente','genitore'] %}{% if plan_enabled(me.school,'passport') %}<li class="nav-item"><a class="nav-link" href="/passport">Educational Passport</a></li>{% endif %}{% if plan_enabled(me.school,'wellbeing') %}<li class="nav-item"><a class="nav-link" href="/wellness-score">Wellness</a></li>{% endif %}{% endif %}
