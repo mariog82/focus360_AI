@@ -23,21 +23,21 @@ APP_NAME = 'Focus360 AI'
 PLANS = {
     'BASE': {
         'name':'Pacchetto Base',
-        'modules':'App Focus, QR docente, dashboard essenziale, CSV docenti/studenti, report CSV',
-        'price':'€ 990/anno',
-        'features':['qr','dashboard','csv','report_csv']
+        'modules':'QR docente, Focus Mode studente, dashboard docente/dirigente, upload CSV docenti/studenti, credenziali, report CSV base, gamification essenziale.',
+        'price':'€ 1.200/anno + IVA',
+        'features':['qr','dashboard','csv','report_csv','gamification_base']
     },
     'PRO': {
         'name':'Pacchetto Pro',
-        'modules':'Tutto Base + AI analytics, gamification, ranking classi/scuole, Digital Wellness Score, report famiglie',
-        'price':'€ 2.490/anno',
-        'features':['qr','dashboard','csv','report_csv','ai','gamification','wellbeing','ranking','passport']
+        'modules':'Tutto Base + AI Analytics, Digital Wellness Score, Educational Passport, gamification completa, ranking classi, report famiglie, piani di intervento.',
+        'price':'€ 2.900/anno + IVA',
+        'features':['qr','dashboard','csv','report_csv','gamification_base','ai','gamification','wellbeing','ranking','passport','interventi','report_famiglie']
     },
     'ENTERPRISE': {
         'name':'Enterprise/PNRR',
-        'modules':'Tutto Pro + Smart Locker/Phone Box, blockchain badge, report ministeriali, API, integrazione registro elettronico',
-        'price':'su preventivo',
-        'features':['qr','dashboard','csv','report_csv','ai','gamification','wellbeing','ranking','passport','blockchain','lockers','api','registro','ministeriale']
+        'modules':'Tutto Pro + Smart Locker/Phone Box, blockchain badge, API, integrazione registro elettronico, report ministeriali, multi-plesso, supporto prioritario.',
+        'price':'€ 6.900/anno + IVA; hardware e integrazioni da preventivare',
+        'features':['qr','dashboard','csv','report_csv','gamification_base','ai','gamification','wellbeing','ranking','passport','interventi','report_famiglie','blockchain','lockers','api','registro','ministeriale','multi_plesso','supporto_prioritario']
     }
 }
 ROLES = ['superadmin','dirigente','docente','studente','genitore']
@@ -61,6 +61,7 @@ class School(db.Model):
     tenant_slug = db.Column(db.String(80))
     notes = db.Column(db.Text)
     modules_enabled = db.Column(db.Text, default='')  # CSV features abilitate/override dal SuperAdmin
+    modules_disabled = db.Column(db.Text, default='')  # moduli disabilitati dal SuperAdmin, es. api,registro
     smart_locker_enabled = db.Column(db.Boolean, default=True)
     last_expiry_notice_at = db.Column(db.DateTime, nullable=True)
 
@@ -417,12 +418,37 @@ def simple_passport_pdf(data):
 def default_features_for_plan(plan):
     return set(PLANS.get(plan or 'BASE', PLANS['BASE']).get('features', []))
 
+ENTERPRISE_ONLY_TOGGLES = {'api', 'registro'}
+ALLOWED_MODULES = {'qr','dashboard','csv','report_csv','gamification_base','ai','gamification','wellbeing','ranking','passport','interventi','report_famiglie','blockchain','lockers','api','registro','ministeriale','multi_plesso','supporto_prioritario'}
+
+def sanitize_modules_enabled(plan, raw):
+    values = {x.strip() for x in (raw or '').split(',') if x.strip()}
+    values = values & ALLOWED_MODULES
+    # API e integrazione registro sono moduli solo Enterprise: non si possono forzare su Base/Pro.
+    if plan != 'ENTERPRISE':
+        values -= ENTERPRISE_ONLY_TOGGLES
+        values.discard('lockers')
+        values.discard('blockchain')
+        values.discard('ministeriale')
+        values.discard('multi_plesso')
+    return ','.join(sorted(values))
+
+def sanitize_modules_disabled(plan, raw):
+    values = {x.strip() for x in (raw or '').split(',') if x.strip()}
+    # Come richiesto: API e registro possono essere disabilitati solo in modalità Enterprise.
+    if plan == 'ENTERPRISE':
+        values = values & ENTERPRISE_ONLY_TOGGLES
+    else:
+        values = set()
+    return ','.join(sorted(values))
+
 def enabled_features(school):
     if not school:
         return default_features_for_plan('BASE')
     base = default_features_for_plan(school.plan)
     extra = {x.strip() for x in (school.modules_enabled or '').split(',') if x.strip()}
-    return base | extra
+    disabled = {x.strip() for x in (getattr(school, 'modules_disabled', '') or '').split(',') if x.strip()}
+    return (base | extra) - disabled
 
 def plan_enabled(school, feature):
     if feature == 'lockers' and school and not getattr(school, 'smart_locker_enabled', True):
@@ -527,8 +553,9 @@ def dashboard_superadmin():
             address=request.form.get('address'), fiscal_code=request.form.get('fiscal_code'), pec=request.form.get('pec'),
             billing_email=request.form.get('billing_email'), plan=request.form.get('plan','BASE'),
             payment_status=request.form.get('payment_status','in_attesa'), payment_method=request.form.get('payment_method','bonifico'),
-            license_end=license_end, modules_enabled=request.form.get('modules_enabled',''),
-            smart_locker_enabled=bool(request.form.get('smart_locker_enabled')), active=True
+            license_end=license_end, modules_enabled=sanitize_modules_enabled(request.form.get('plan','BASE'), request.form.get('modules_enabled','')),
+            modules_disabled=sanitize_modules_disabled(request.form.get('plan','BASE'), ','.join(request.form.getlist('modules_disabled'))),
+            smart_locker_enabled=bool(request.form.get('smart_locker_enabled')) and request.form.get('plan')=='ENTERPRISE', active=True
         )
         db.session.add(school); db.session.commit()
         pwd=random_password()
@@ -553,8 +580,9 @@ def superadmin_update_school(school_id):
     school.plan=request.form.get('plan', school.plan)
     school.payment_status=request.form.get('payment_status', school.payment_status)
     school.payment_method=request.form.get('payment_method', school.payment_method)
-    school.modules_enabled=request.form.get('modules_enabled', school.modules_enabled or '')
-    school.smart_locker_enabled=bool(request.form.get('smart_locker_enabled'))
+    school.modules_enabled=sanitize_modules_enabled(school.plan, request.form.get('modules_enabled', school.modules_enabled or ''))
+    school.modules_disabled=sanitize_modules_disabled(school.plan, ','.join(request.form.getlist('modules_disabled')))
+    school.smart_locker_enabled=bool(request.form.get('smart_locker_enabled')) and school.plan=='ENTERPRISE'
     school.active = bool(request.form.get('active'))
     lic_end=request.form.get('license_end')
     if lic_end:
@@ -1210,7 +1238,7 @@ def create_demo_environment(reset=False):
         payment_status='pagato',
         payment_method='bonifico / MEPA',
         tenant_slug='demo-focus360-enterprise',
-        notes='Ambiente demo generato automaticamente per presentazioni commerciali Focus360 AI Enterprise.', modules_enabled='', smart_locker_enabled=True
+        notes='Ambiente demo generato automaticamente per presentazioni commerciali Focus360 AI Enterprise.', modules_enabled='', modules_disabled='', smart_locker_enabled=True
     )
     db.session.add(school); db.session.flush()
 
@@ -1330,6 +1358,7 @@ def ensure_runtime_columns():
             "ALTER TABLE user ADD COLUMN must_change_password BOOLEAN DEFAULT 1",
             "ALTER TABLE user ADD COLUMN parent_student_id INTEGER",
             "ALTER TABLE school ADD COLUMN modules_enabled TEXT DEFAULT ''",
+            "ALTER TABLE school ADD COLUMN modules_disabled TEXT DEFAULT ''",
             "ALTER TABLE school ADD COLUMN smart_locker_enabled BOOLEAN DEFAULT 1",
             "ALTER TABLE school ADD COLUMN last_expiry_notice_at DATETIME"
         ]
@@ -1339,6 +1368,7 @@ def ensure_runtime_columns():
             'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT TRUE',
             'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS parent_student_id INTEGER',
             "ALTER TABLE school ADD COLUMN IF NOT EXISTS modules_enabled TEXT DEFAULT ''",
+            "ALTER TABLE school ADD COLUMN IF NOT EXISTS modules_disabled TEXT DEFAULT ''",
             'ALTER TABLE school ADD COLUMN IF NOT EXISTS smart_locker_enabled BOOLEAN DEFAULT TRUE',
             'ALTER TABLE school ADD COLUMN IF NOT EXISTS last_expiry_notice_at TIMESTAMP'
         ]

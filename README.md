@@ -1,6 +1,6 @@
-# Focus360 AI Enterprise v6
+# Focus360 AI Enterprise v7
 
-Piattaforma Flask multi-istituto per benessere digitale, modalità Focus, gamification, Digital Wellness Score, Educational Passport, gestione licenze e moduli.
+Piattaforma Flask multi-istituto per benessere digitale, modalità Focus, gamification, Digital Wellness Score, Educational Passport, gestione licenze, moduli e piani commerciali.
 
 ## Credenziali demo
 
@@ -10,45 +10,65 @@ Piattaforma Flask multi-istituto per benessere digitale, modalità Focus, gamifi
 - Studente: `studente@demo.focus360.ai` / `studente123`
 - Genitore: `genitore@demo.focus360.ai` / `genitore123`
 
-Nel primo accesso gli utenti creati via CSV devono cambiare password. Nel prototipo demo gli utenti predefiniti possono essere rigenerati dal SuperAdmin.
+## Novità v7
 
-## Novità v6
+- Campi obbligatori evidenziati con bordo rosso se non compilati.
+- Messaggio chiaro: “Completa tutti i campi obbligatori evidenziati in rosso”.
+- API e integrazione registro elettronico disponibili e disattivabili solo nel piano Enterprise/PNRR.
+- Smart Locker/Phone Box disponibile solo nel piano Enterprise/PNRR e disattivabile dal SuperAdmin.
+- Redistribuzione dei moduli nei pacchetti Base, Pro, Enterprise/PNRR.
+- Prezzi ricalcolati in modo più sostenibile per le scuole.
+- Pagina `/plans` aggiornata con tabella comparativa.
 
-- Dirigente: gestione/edit utenti creati, reset password temporanea, disattivazione utenti.
-- SuperAdmin: modifica completa dell’istituto, campi obbligatori, scadenza licenza, pagamento, piano, moduli, smart locker ON/OFF.
-- SuperAdmin: avviso scadenza abbonamento con testo email/manuale e invio SMTP se configurato.
-- Password: tutti i campi password hanno pulsante Mostra/Nascondi.
-- Correzione Passport per dirigente, docente, studente e genitore.
-- Correzione associazione genitore-studente tramite `parent_student_id`.
-- Upload CSV docenti/studenti abilitato nei piani Base, Pro ed Enterprise/PNRR.
-- Differenze piani visibili nella pagina `/plans`.
+## Prezzi consigliati
 
-## Differenze pacchetti
+### Pacchetto Base — € 1.200/anno + IVA
 
-### Base
-- QR docente
-- app Focus studente
-- dashboard essenziale
-- upload CSV docenti/studenti
-- report CSV
+Per scuole che vogliono iniziare senza hardware.
 
-### Pro
-- tutto Base
-- AI Analytics
-- gamification
-- ranking classi/scuole
-- Digital Wellness Score
-- Educational Passport
-- report famiglie
+Include:
+- QR docente;
+- Focus Mode studente;
+- dashboard docente/dirigente;
+- upload CSV docenti/studenti/genitori;
+- credenziali temporanee;
+- report CSV base;
+- gamification essenziale.
 
-### Enterprise/PNRR
-- tutto Pro
-- Smart Locker / Phone Box
-- blockchain badge
-- API hardware/mobile
-- report ministeriali
-- integrazione registro elettronico
-- moduli gestibili/disattivabili dal SuperAdmin
+### Pacchetto Pro — € 2.900/anno + IVA
+
+È il piano consigliato e più vendibile.
+
+Include tutto il Base, più:
+- AI Analytics;
+- Digital Wellness Score;
+- Educational Passport PDF;
+- gamification completa;
+- ranking classi;
+- report famiglie;
+- piani di intervento.
+
+### Enterprise/PNRR — € 6.900/anno + IVA
+
+Per reti di scuole, scuole tecniche e progetti PNRR.
+
+Include tutto il Pro, più:
+- Smart Locker / Phone Box;
+- blockchain badge;
+- API;
+- integrazione registro elettronico;
+- report ministeriali;
+- multi-plesso;
+- supporto prioritario.
+
+Hardware, installazione, formazione avanzata e integrazioni con registro elettronico vanno quotati separatamente.
+
+## Logica moduli
+
+- Base e Pro non possono avere `api` e `registro`.
+- Solo Enterprise/PNRR può usare e disabilitare `api` e `registro`.
+- Smart Locker è forzato OFF nei piani Base e Pro.
+- Se il SuperAdmin passa un istituto da Enterprise a Pro/Base, API, registro e locker vengono automaticamente esclusi.
 
 ## CSV Docenti
 
@@ -67,23 +87,6 @@ Bianchi;Luca;2009-04-15;luca.bianchi@studenti.it;3334445555;4A;genitore.bianchi@
 ```
 
 Il sistema genera username=email e password temporanea casuale. Le credenziali possono essere esportate da Dirigente o SuperAdmin.
-
-## Avvisi scadenza licenza
-
-Il SuperAdmin vede gli istituti in scadenza entro 30 giorni e può usare il pulsante `Invia avviso scadenza`.
-
-Se si configurano variabili SMTP, l’app prova l’invio automatico:
-
-```env
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_TLS=1
-SMTP_USER=utente
-SMTP_PASSWORD=password
-SMTP_FROM=noreply@focus360.ai
-```
-
-Se SMTP non è configurato, viene mostrato un link `mailto:` e il testo già pronto.
 
 ## Deploy Render
 
@@ -108,3 +111,4 @@ PHONEBOX_API_KEY=demo-phonebox-key
 ```
 
 Per produzione reale usare PostgreSQL Render al posto di SQLite.
+
