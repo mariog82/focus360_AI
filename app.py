@@ -746,10 +746,13 @@ def dirigente_edit_user(user_id):
         u.discipline=request.form.get('discipline','')
         u.class_name=request.form.get('class_name','')
         u.birthdate=request.form.get('birthdate','')
+        if plan_enabled(me.school, 'multi_plesso'):
+            u.plesso_id = int(request.form.get('plesso_id') or 0) or None
         u.active=bool(request.form.get('active'))
         db.session.commit(); flash('Utente aggiornato', 'success')
         return redirect(url_for('dirigente_users'))
-    return render_template('user_edit.html', u=u)
+    plessi = Plesso.query.filter_by(school_id=me.school_id, active=True).order_by(Plesso.name).all() if plan_enabled(me.school, 'multi_plesso') else []
+    return render_template('user_edit.html', u=u, plessi=plessi)
 
 @app.route('/dirigente/users/<int:user_id>/reset-password', methods=['POST'])
 @login_required('dirigente')
@@ -823,8 +826,10 @@ def upload(kind):
     if kind=='docenti' and me.role!='dirigente':
         flash('Solo il dirigente può caricare docenti','danger'); return redirect(url_for('index'))
     created=[]
+    plessi = Plesso.query.filter_by(school_id=me.school_id, active=True).order_by(Plesso.name).all() if plan_enabled(me.school, 'multi_plesso') else []
     if request.method=='POST':
         f=request.files.get('csvfile')
+        default_plesso_id = int(request.form.get('plesso_id') or 0) or None
         text=f.read().decode('utf-8-sig')
         reader=csv.DictReader(io.StringIO(text), delimiter=';')
         for row in reader:
@@ -832,18 +837,23 @@ def upload(kind):
             if not email or User.query.filter_by(email=email).first(): continue
             pwd=random_password()
             role='docente' if kind=='docenti' else 'studente'
-            u=User(school_id=me.school_id, role=role, surname=row.get('cognome',''), name=row.get('nome',''), email=email, phone=row.get('telefono',''), password_hash=generate_password_hash(pwd), temporary_password=pwd, must_change_password=True, discipline=row.get('disciplina',''), class_name=row.get('classe',''), birthdate=row.get('data di nascita',''))
+            row_plesso_id = default_plesso_id
+            row_plesso_code = (row.get('plesso') or row.get('codice_plesso') or row.get('sede') or '').strip()
+            if row_plesso_code and plan_enabled(me.school, 'multi_plesso'):
+                pl = Plesso.query.filter_by(school_id=me.school_id, code=row_plesso_code).first()
+                if pl: row_plesso_id = pl.id
+            u=User(school_id=me.school_id, plesso_id=row_plesso_id, role=role, surname=row.get('cognome',''), name=row.get('nome',''), email=email, phone=row.get('telefono',''), password_hash=generate_password_hash(pwd), temporary_password=pwd, must_change_password=True, discipline=row.get('disciplina',''), class_name=row.get('classe',''), birthdate=row.get('data di nascita',''))
             db.session.add(u); db.session.flush(); created.append((u.email,pwd,u.role,u.class_name))
             if role=='studente':
                 parent_csv=(row.get('email_genitore') or row.get('mail_genitore') or row.get('genitore_email') or '').strip().lower()
                 p_email=parent_csv or f"genitore.{u.email}"
                 if not User.query.filter_by(email=p_email).first():
                     gpwd=random_password()
-                    g=User(school_id=me.school_id, parent_student_id=u.id, role='genitore', surname='Genitore', name=f'{u.name} {u.surname}', email=p_email, password_hash=generate_password_hash(gpwd), temporary_password=gpwd, must_change_password=True, class_name=u.class_name)
+                    g=User(school_id=me.school_id, plesso_id=row_plesso_id, parent_student_id=u.id, role='genitore', surname='Genitore', name=f'{u.name} {u.surname}', email=p_email, password_hash=generate_password_hash(gpwd), temporary_password=gpwd, must_change_password=True, class_name=u.class_name)
                     db.session.add(g); created.append((g.email,gpwd,g.role,g.class_name))
         db.session.commit()
         return render_template('upload_result.html', created=created)
-    return render_template('upload.html', kind=kind)
+    return render_template('upload.html', kind=kind, plessi=plessi)
 
 @app.route('/docente', methods=['GET','POST'])
 @login_required('docente')
@@ -1259,6 +1269,27 @@ def plesso_edit(plesso_id):
         db.session.commit(); flash('Plesso aggiornato.', 'success')
         return redirect(url_for('plessi', school_id=pl.school_id) if me.role=='superadmin' else url_for('plessi'))
     return render_template('plesso_edit.html', plesso=pl)
+
+@app.route('/plessi/<int:plesso_id>/users', methods=['GET','POST'])
+@login_required(['dirigente','superadmin'])
+@require_feature('multi_plesso')
+def plesso_users(plesso_id):
+    me=current_user(); pl=Plesso.query.get_or_404(plesso_id)
+    if me.role != 'superadmin' and pl.school_id != me.school_id:
+        flash('Plesso non accessibile.', 'danger'); return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        selected = [int(x) for x in request.form.getlist('user_ids')]
+        action = request.form.get('action','assign')
+        if action == 'assign':
+            User.query.filter(User.school_id==pl.school_id, User.id.in_(selected), User.role.in_(['docente','studente','genitore'])).update({User.plesso_id: pl.id}, synchronize_session=False)
+            flash('Utenti associati al plesso.', 'success')
+        elif action == 'remove':
+            User.query.filter(User.school_id==pl.school_id, User.id.in_(selected), User.plesso_id==pl.id).update({User.plesso_id: None}, synchronize_session=False)
+            flash('Utenti rimossi dal plesso.', 'warning')
+        db.session.commit()
+        return redirect(url_for('plesso_users', plesso_id=pl.id))
+    users = User.query.filter(User.school_id==pl.school_id, User.role.in_(['docente','studente','genitore'])).order_by(User.role, User.class_name, User.surname).all()
+    return render_template('plesso_users.html', plesso=pl, users=users)
 
 @app.route('/plessi/<int:plesso_id>/delete', methods=['POST'])
 @login_required(['dirigente','superadmin'])
