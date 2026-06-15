@@ -1,5 +1,0 @@
-{% extends 'base.html' %}{% block content %}
-<div class="card p-4"><h2>Avviso scadenza abbonamento</h2><p><b>Istituto:</b> {{school.name}}<br><b>Email:</b> {{school.billing_email}}<br><b>Scadenza:</b> {{school.license_end}}</p>{% if mailto %}<a class="btn btn-primary" href="{{mailto}}">Apri mail manuale</a>{% endif %}<hr><h5>Testo comunicazione</h5><pre class="bg-light p-3 rounded">Oggetto: {{subject}}
-
-{{body}}</pre><a class="btn btn-outline-secondary" href="/superadmin">Torna alla console</a></div>
-{% endblock %}
