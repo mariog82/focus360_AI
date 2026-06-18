@@ -1,0 +1,23 @@
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports: ["8080:8080"]
+    environment: &env
+      DATABASE_URL: sqlite:////data/focus360_micro.db
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key-change-me}
+    volumes: ["focus360_data:/data"]
+    depends_on: [auth-service, tenant-service, focus-service, wellness-service, passport-service, locker-service, registry-service, billing-service, compliance-service]
+  auth-service: {build: {context: ., dockerfile: services/auth_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  tenant-service: {build: {context: ., dockerfile: services/tenant_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  focus-service: {build: {context: ., dockerfile: services/focus_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  wellness-service: {build: {context: ., dockerfile: services/wellness_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  passport-service: {build: {context: ., dockerfile: services/passport_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  locker-service: {build: {context: ., dockerfile: services/locker_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  registry-service: {build: {context: ., dockerfile: services/registry_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  billing-service: {build: {context: ., dockerfile: services/billing_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+  compliance-service: {build: {context: ., dockerfile: services/compliance_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
+volumes: {focus360_data: {}}
