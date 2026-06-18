@@ -33,3 +33,48 @@ Sono inclusi test di integrazione, sistema, accettazione e sicurezza, più scrip
 
 ## Note produzione
 Questa è una base architetturale eseguibile/prototipale. Per produzione servono PostgreSQL, gestione segreti, HTTPS obbligatorio, logging centralizzato, backup, DPIA, DPA, privacy policy, hardening container, WAF e monitoraggio.
+
+## Docker Compose fix v2 - microservizi realmente collegati
+
+Questa versione corregge `docker-compose.yml` per Windows/Docker Desktop:
+
+- nomi servizi Docker coerenti con gli URL del Gateway: `auth-service`, `tenant-service`, `focus-service`, `wellness-service`, `passport-service`, `billing-service`, `compliance-service`, `locker-service`, `registry-service`;
+- rete Docker dedicata `focus360-net`;
+- healthcheck per tutti i microservizi;
+- Gateway esposto su `http://localhost:8080`;
+- microservizi esposti anche su porte locali per debug: `8001-8009`;
+- nuovo endpoint Gateway: `/health/services` per verificare la raggiungibilità reale interna.
+
+### Avvio su Windows PowerShell
+
+```powershell
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+docker compose ps
+```
+
+Apri:
+
+- `http://localhost:8080`
+- `http://localhost:8080/health`
+- `http://localhost:8080/health/services`
+
+### Test rapido
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\check_microservices.ps1
+```
+
+Se vuoi controllare un servizio singolo:
+
+- Auth: `http://localhost:8001/health`
+- Tenant: `http://localhost:8002/health`
+- Focus: `http://localhost:8003/health`
+- Wellness: `http://localhost:8004/health`
+- Passport: `http://localhost:8005/health`
+- Billing: `http://localhost:8006/health`
+- Compliance: `http://localhost:8007/health`
+- Locker: `http://localhost:8008/health`
+- Registry: `http://localhost:8009/health`
+

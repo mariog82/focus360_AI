@@ -70,7 +70,7 @@ def index():
           <div class="card-body p-4">
             <h2 class="h4">Endpoint principali</h2>
             <ul>
-              <li><code>/health</code> stato gateway e configurazione servizi.</li>
+              <li><code>/health</code> stato gateway e configurazione servizi.</li><li><code>/health/services</code> verifica reale di connessione ai microservizi.</li>
               <li><code>/api/&lt;service&gt;/&lt;path&gt;</code> proxy verso i microservizi.</li>
               <li><code>/docs</code> istruzioni operative per Render e microservizi.</li>
             </ul>
@@ -115,6 +115,31 @@ Start Command: gunicorn app:app --bind 0.0.0.0:$PORT</pre>
 @app.get('/health')
 def health():
     return jsonify({'gateway': 'ok', 'mode': 'alpha-microservices-render', 'services': SERVICES})
+
+
+
+
+@app.get('/health/services')
+def health_services():
+    """Verifica raggiungibilità reale dei microservizi dalla rete Docker interna."""
+    results = {}
+    overall = 'ok'
+    for name, base_url in SERVICES.items():
+        target = f"{base_url.rstrip('/')}/health"
+        try:
+            r = requests.get(target, timeout=3, headers={'X-Internal-API-Key': os.getenv('INTERNAL_API_KEY', 'dev-internal-key-change-me')})
+            results[name] = {
+                'url': target,
+                'status_code': r.status_code,
+                'reachable': r.status_code == 200,
+                'body': r.json() if r.headers.get('content-type','').startswith('application/json') else r.text[:200]
+            }
+            if r.status_code != 200:
+                overall = 'degraded'
+        except requests.RequestException as exc:
+            results[name] = {'url': target, 'reachable': False, 'error': str(exc)}
+            overall = 'degraded'
+    return jsonify({'gateway': 'ok', 'overall': overall, 'services': results}), (200 if overall == 'ok' else 503)
 
 
 @app.route('/api/<service>/<path:path>', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])

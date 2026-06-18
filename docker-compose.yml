@@ -1,23 +1,197 @@
+name: focus360_microservices_alpha
+
+x-common-env: &common-env
+  DATABASE_URL: sqlite:////data/focus360_micro.db
+  SECRET_KEY: ${SECRET_KEY:-focus360-dev-secret-change-me}
+  INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key-change-me}
+  PYTHONUNBUFFERED: "1"
+  GUNICORN_CMD_ARGS: "--timeout 120 --workers 1 --access-logfile - --error-logfile -"
+
+x-healthcheck: &service-healthcheck
+  test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)\""]
+  interval: 20s
+  timeout: 5s
+  retries: 5
+  start_period: 15s
 
 services:
   gateway:
     build:
       context: .
       dockerfile: gateway/Dockerfile
-    ports: ["8080:8080"]
-    environment: &env
-      DATABASE_URL: sqlite:////data/focus360_micro.db
-      SECRET_KEY: ${SECRET_KEY:-change-me}
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key-change-me}
-    volumes: ["focus360_data:/data"]
-    depends_on: [auth-service, tenant-service, focus-service, wellness-service, passport-service, locker-service, registry-service, billing-service, compliance-service]
-  auth-service: {build: {context: ., dockerfile: services/auth_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  tenant-service: {build: {context: ., dockerfile: services/tenant_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  focus-service: {build: {context: ., dockerfile: services/focus_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  wellness-service: {build: {context: ., dockerfile: services/wellness_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  passport-service: {build: {context: ., dockerfile: services/passport_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  locker-service: {build: {context: ., dockerfile: services/locker_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  registry-service: {build: {context: ., dockerfile: services/registry_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  billing-service: {build: {context: ., dockerfile: services/billing_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-  compliance-service: {build: {context: ., dockerfile: services/compliance_service/Dockerfile}, environment: *env, volumes: ["focus360_data:/data"]}
-volumes: {focus360_data: {}}
+    container_name: focus360-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *common-env
+      AUTH_URL: http://auth-service:8000
+      BILLING_URL: http://billing-service:8000
+      COMPLIANCE_URL: http://compliance-service:8000
+      FOCUS_URL: http://focus-service:8000
+      LOCKER_URL: http://locker-service:8000
+      PASSPORT_URL: http://passport-service:8000
+      REGISTRY_URL: http://registry-service:8000
+      TENANT_URL: http://tenant-service:8000
+      WELLNESS_URL: http://wellness-service:8000
+    volumes:
+      - focus360_data:/data
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      billing-service:
+        condition: service_healthy
+      compliance-service:
+        condition: service_healthy
+      focus-service:
+        condition: service_healthy
+      locker-service:
+        condition: service_healthy
+      passport-service:
+        condition: service_healthy
+      registry-service:
+        condition: service_healthy
+      tenant-service:
+        condition: service_healthy
+      wellness-service:
+        condition: service_healthy
+    networks:
+      - focus360-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).status==200 else 1)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth_service/Dockerfile
+    container_name: focus360-auth-service
+    ports:
+      - "8001:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  tenant-service:
+    build:
+      context: .
+      dockerfile: services/tenant_service/Dockerfile
+    container_name: focus360-tenant-service
+    ports:
+      - "8002:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  focus-service:
+    build:
+      context: .
+      dockerfile: services/focus_service/Dockerfile
+    container_name: focus360-focus-service
+    ports:
+      - "8003:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  wellness-service:
+    build:
+      context: .
+      dockerfile: services/wellness_service/Dockerfile
+    container_name: focus360-wellness-service
+    ports:
+      - "8004:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  passport-service:
+    build:
+      context: .
+      dockerfile: services/passport_service/Dockerfile
+    container_name: focus360-passport-service
+    ports:
+      - "8005:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  billing-service:
+    build:
+      context: .
+      dockerfile: services/billing_service/Dockerfile
+    container_name: focus360-billing-service
+    ports:
+      - "8006:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  compliance-service:
+    build:
+      context: .
+      dockerfile: services/compliance_service/Dockerfile
+    container_name: focus360-compliance-service
+    ports:
+      - "8007:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  locker-service:
+    build:
+      context: .
+      dockerfile: services/locker_service/Dockerfile
+    container_name: focus360-locker-service
+    ports:
+      - "8008:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+  registry-service:
+    build:
+      context: .
+      dockerfile: services/registry_service/Dockerfile
+    container_name: focus360-registry-service
+    ports:
+      - "8009:8000"
+    environment: *common-env
+    volumes:
+      - focus360_data:/data
+    networks:
+      - focus360-net
+    healthcheck: *service-healthcheck
+
+volumes:
+  focus360_data:
+
+networks:
+  focus360-net:
+    driver: bridge
