@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: focus360-ai-alpha-gateway
+    env: python
+    plan: starter
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: SECRET_KEY
+        generateValue: true
+      - key: INTERNAL_API_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:////tmp/focus360_micro.db
