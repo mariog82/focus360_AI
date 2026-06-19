@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ APP_NAME }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{--navy:#071b3a;--blue:#0d6efd;--cyan:#38bdf8;--green:#22c55e;--ink:#0f172a;--muted:#64748b;--soft:#f4f7fb;--card:#ffffff;--line:#e5e7eb;}
+    body{background:radial-gradient(circle at top left,#e0f2fe 0,#f8fafc 32%,#f4f7fb 100%);color:var(--ink);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+    .navbar{background:linear-gradient(90deg,#06152f,#0d47a1,#2563eb);box-shadow:0 10px 30px rgba(15,23,42,.18)}
+    .navbar-brand{letter-spacing:.2px}.navbar .nav-link{font-weight:600;opacity:.92}.navbar .nav-link:hover{opacity:1;color:#e0f2fe!important}
+    .page-shell{max-width:1320px}.card{border:1px solid rgba(226,232,240,.9);border-radius:22px;box-shadow:0 14px 36px rgba(15,23,42,.08);overflow:hidden}.card-soft{background:rgba(255,255,255,.82);backdrop-filter:blur(10px)}
+    .hero{background:linear-gradient(135deg,#071b3a 0%,#0d47a1 48%,#0284c7 100%);color:white;border-radius:28px;box-shadow:0 20px 55px rgba(13,71,161,.28);position:relative;overflow:hidden}.hero:after{content:"";position:absolute;right:-80px;top:-80px;width:260px;height:260px;border-radius:999px;background:rgba(255,255,255,.12)}
+    .hero *{position:relative;z-index:1}.brand-badge,.chip{display:inline-flex;align-items:center;gap:.35rem;background:#e0f2fe;color:#075985;border-radius:999px;padding:.35rem .75rem;font-weight:800;font-size:.82rem}.chip-green{background:#dcfce7;color:#166534}.chip-orange{background:#ffedd5;color:#9a3412}.chip-purple{background:#ede9fe;color:#5b21b6}
+    .kpi{font-size:2.1rem;font-weight:900;letter-spacing:-.04em}.small-muted{font-size:.92rem;color:var(--muted)}.section-title{font-weight:900;letter-spacing:-.04em}.icon-tile{width:44px;height:44px;border-radius:14px;background:#eff6ff;color:#0d47a1;display:grid;place-items:center;font-size:1.35rem;flex:0 0 auto}.metric-card{border-radius:22px;padding:1.25rem;background:white;border:1px solid var(--line);box-shadow:0 10px 30px rgba(15,23,42,.06)}
+    .btn{border-radius:14px;font-weight:800}.btn-primary{background:linear-gradient(135deg,#0d47a1,#2563eb);border:0}.btn-success{background:linear-gradient(135deg,#15803d,#22c55e);border:0}.btn-outline-primary{border-width:2px}.table{background:white}.password-wrap{position:relative}.password-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:#eef2ff;color:#1d4ed8;border-radius:10px;padding:4px 10px;font-size:.8rem;font-weight:800}.is-invalid,.form-control.is-invalid,.form-select.is-invalid{border:2px solid #dc3545!important;box-shadow:0 0 0 .18rem rgba(220,53,69,.15)!important}.required-error{color:#dc3545;font-size:.85rem;margin-top:-.35rem;margin-bottom:.5rem}.module-chip{border-radius:999px;padding:.25rem .6rem;font-size:.78rem;font-weight:800}.locked{opacity:.55;filter:grayscale(.3)}
+    .app-footer{color:#64748b;font-size:.9rem}.sidebar-note{border-left:4px solid #0d6efd;background:#eff6ff;border-radius:16px;padding:1rem}.status-dot{width:.7rem;height:.7rem;border-radius:999px;display:inline-block;background:#22c55e}.status-dot.warn{background:#f97316}.status-dot.bad{background:#dc2626}
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark mb-4 sticky-top">
+  <div class="container-fluid px-lg-4">
+    <a class="navbar-brand fw-black fw-bold" href="/"><i class="bi bi-bullseye me-2"></i>{{ APP_NAME }}</a>
+    <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#n"><span class="navbar-toggler-icon"></span></button>
+    <div id="n" class="collapse navbar-collapse">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        {% if me %}
+        <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-grid me-1"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/modules"><i class="bi bi-layers me-1"></i>Moduli</a></li>
+        {% if me.role in ['dirigente','docente'] %}
+          {% if plan_enabled(me.school,'ai') %}<li class="nav-item"><a class="nav-link" href="/ai">AI Analytics</a></li>{% endif %}
+          {% if plan_enabled(me.school,'wellbeing') %}<li class="nav-item"><a class="nav-link" href="/wellness-score">Wellness</a></li>{% endif %}
+          {% if plan_enabled(me.school,'lockers') %}<li class="nav-item"><a class="nav-link" href="/lockers">Locker</a></li>{% endif %}
+          {% if plan_enabled(me.school,'api') %}<li class="nav-item"><a class="nav-link" href="/api-console">API</a></li>{% endif %}
+          {% if plan_enabled(me.school,'registro') %}<li class="nav-item"><a class="nav-link" href="/registro">Registro</a></li>{% endif %}
+          {% if plan_enabled(me.school,'report_csv') %}<li class="nav-item"><a class="nav-link" href="/report.csv">Report CSV</a></li>{% endif %}
+          {% if plan_enabled(me.school,'ministeriale') %}<li class="nav-item"><a class="nav-link" href="/ministeriale">PTOF/PNRR</a></li>{% endif %}
+          {% if plan_enabled(me.school,'multi_plesso') %}<li class="nav-item"><a class="nav-link" href="/plessi">Multi-plesso</a></li>{% endif %}
+          {% if plan_enabled(me.school,'interventi') %}<li class="nav-item"><a class="nav-link" href="/interventi">Interventi</a></li>{% endif %}
+        {% endif %}
+        {% if me.role == 'dirigente' %}<li class="nav-item"><a class="nav-link" href="/dirigente/users">Utenti</a></li>{% endif %}
+        {% if me.role in ['dirigente','superadmin'] %}{% if me.role == 'superadmin' or plan_enabled(me.school,'blockchain') %}<li class="nav-item"><a class="nav-link" href="/blockchain">Blockchain</a></li>{% endif %}<li class="nav-item"><a class="nav-link" href="/plans">Piani</a></li>{% endif %}
+        {% if me.role == 'superadmin' %}<li class="nav-item"><a class="nav-link" href="/payments">Pagamenti</a></li><li class="nav-item"><a class="nav-link" href="/plessi">Multi-plesso</a></li><li class="nav-item"><a class="nav-link" href="/api-console">API</a></li><li class="nav-item"><a class="nav-link" href="/registro">Registro</a></li>{% endif %}
+        {% if me.role in ['dirigente','genitore'] and (me.role=='genitore' or plan_enabled(me.school,'report_famiglie')) %}<li class="nav-item"><a class="nav-link" href="/consensi">Consensi</a></li>{% endif %}
+        {% if me.role == 'studente' %}<li class="nav-item"><a class="nav-link" href="/join-lesson"><i class="bi bi-qr-code-scan me-1"></i>Partecipa</a></li>{% endif %}
+        {% if me.role in ['studente','genitore'] %}{% if plan_enabled(me.school,'passport') %}<li class="nav-item"><a class="nav-link" href="/passport">Passport</a></li>{% endif %}{% if plan_enabled(me.school,'wellbeing') %}<li class="nav-item"><a class="nav-link" href="/wellness-score">Wellness</a></li>{% endif %}{% endif %}
+        {% if me.role == 'superadmin' %}<li class="nav-item"><a class="nav-link" href="/system-status"><i class="bi bi-hdd-network me-1"></i>Gateway</a></li>{% endif %}
+        {% endif %}
+      </ul>
+      {% if me %}<span class="navbar-text me-3 d-none d-xl-inline">{{ me.name }} {{ me.surname }} · {{ me.role }}{% if me.school %} · {{ me.school.plan }}{% endif %}</span><a class="btn btn-outline-light btn-sm" href="/logout">Esci</a>{% endif %}
+    </div>
+  </div>
+</nav>
+<main class="container page-shell pb-5">
+  {% with messages=get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="alert alert-{{cat}} alert-dismissible fade show shadow-sm border-0" role="alert">{{msg}}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endfor %}{% endwith %}
+  {% block content %}{% endblock %}
+  <div class="app-footer mt-5 pt-4 border-top d-flex flex-wrap gap-2 justify-content-between"><span>Focus360 AI · Frontend Service SaaS</span><span>Gateway: {{ GATEWAY_URL }}</span></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.querySelectorAll('input[type="password"]').forEach(function(inp){if(inp.parentElement.classList.contains('password-wrap')) return;const wrap=document.createElement('div'); wrap.className='password-wrap mb-2';inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(inp); inp.classList.add('pe-5');const btn=document.createElement('button'); btn.type='button'; btn.className='password-toggle'; btn.textContent='Mostra';btn.onclick=function(){ inp.type = inp.type==='password' ? 'text' : 'password'; btn.textContent = inp.type==='password' ? 'Mostra' : 'Nascondi'; };wrap.appendChild(btn);});
+document.querySelectorAll('form').forEach(function(form){form.addEventListener('submit', function(ev){let firstInvalid=null;form.querySelectorAll('[required]').forEach(function(el){let invalid = !String(el.value || '').trim();el.classList.toggle('is-invalid', invalid);let next = el.nextElementSibling;if(invalid && (!next || !next.classList || !next.classList.contains('required-error'))){const msg=document.createElement('div'); msg.className='required-error'; msg.textContent='Campo obbligatorio non compilato';el.insertAdjacentElement('afterend', msg);} else if(!invalid && next && next.classList && next.classList.contains('required-error')) {next.remove();}if(invalid && !firstInvalid) firstInvalid=el;});if(firstInvalid){ev.preventDefault(); ev.stopPropagation(); firstInvalid.focus();const alert=document.createElement('div'); alert.className='alert alert-danger mt-2'; alert.textContent='Completa tutti i campi obbligatori evidenziati in rosso.';if(!form.querySelector('.alert.alert-danger')) form.prepend(alert);}}, true);});
+</script>
+</body></html>

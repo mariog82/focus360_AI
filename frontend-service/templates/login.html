@@ -1,0 +1,37 @@
+{% extends 'base.html' %}{% block content %}
+<div class="row align-items-center g-4 py-lg-5">
+  <div class="col-lg-7">
+    <section class="hero p-5 mb-4">
+      <span class="chip chip-green mb-3"><i class="bi bi-heart-pulse"></i> Digital Wellness Platform</span>
+      <h1 class="display-5 fw-bold mb-3">Focus360 AI</h1>
+      <p class="lead mb-4">La piattaforma SaaS per migliorare attenzione, benessere digitale, cittadinanza digitale e apprendimento nella scuola secondaria.</p>
+      <div class="row g-3">
+        <div class="col-md-4"><div class="metric-card bg-transparent text-white border border-light border-opacity-25"><div class="kpi">AI</div><div>Analytics educative</div></div></div>
+        <div class="col-md-4"><div class="metric-card bg-transparent text-white border border-light border-opacity-25"><div class="kpi">360</div><div>Visione scuola-famiglia</div></div></div>
+        <div class="col-md-4"><div class="metric-card bg-transparent text-white border border-light border-opacity-25"><div class="kpi">PTOF</div><div>Report e indicatori</div></div></div>
+      </div>
+    </section>
+    <div class="row g-3">
+      <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="icon-tile mb-3"><i class="bi bi-speedometer2"></i></div><h5>Wellness Score</h5><p class="small-muted mb-0">Indicatori chiari per studenti, classi e istituti.</p></div></div></div>
+      <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="icon-tile mb-3"><i class="bi bi-journal-check"></i></div><h5>Educational Passport</h5><p class="small-muted mb-0">Portfolio digitale di competenze, PCTO ed Educazione Civica.</p></div></div></div>
+      <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="icon-tile mb-3"><i class="bi bi-diagram-3"></i></div><h5>SaaS modulare</h5><p class="small-muted mb-0">Frontend collegato al Gateway e ai microservizi.</p></div></div></div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card shadow-lg border-0">
+      <div class="card-body p-4 p-lg-5">
+        <span class="chip mb-3"><i class="bi bi-shield-check"></i> Accesso sicuro</span>
+        <h2 class="section-title h3 mb-2">Accedi alla demo</h2>
+        <p class="small-muted mb-4">Usa le credenziali demo o gli utenti creati dal SuperAdmin.</p>
+        <form method="post" novalidate>
+          <label class="form-label fw-bold">Email</label><input class="form-control form-control-lg mb-3" name="email" type="email" placeholder="superadmin@focus360.ai" required>
+          <label class="form-label fw-bold">Password</label><input class="form-control form-control-lg mb-3" name="password" type="password" placeholder="••••••••" required>
+          <button class="btn btn-primary btn-lg w-100" type="submit"><i class="bi bi-box-arrow-in-right me-1"></i> Entra</button>
+        </form>
+        <div class="sidebar-note mt-4"><strong>Demo SuperAdmin</strong><br><code>superadmin@focus360.ai</code><br><code>admin123</code></div>
+        <a class="btn btn-outline-primary w-100 mt-3" href="/system-status">Stato Gateway e microservizi</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

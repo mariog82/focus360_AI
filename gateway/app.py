@@ -4,17 +4,20 @@ import requests
 
 app = Flask(__name__)
 
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://frontend-service:8000')
+
 SERVICES = {
-    'auth': os.getenv('AUTH_SERVICE_URL', 'http://auth-service:8000'),
-    'tenant': os.getenv('TENANT_SERVICE_URL', 'http://tenant-service:8000'),
-    'focus': os.getenv('FOCUS_SERVICE_URL', 'http://focus-service:8000'),
-    'wellness': os.getenv('WELLNESS_SERVICE_URL', 'http://wellness-service:8000'),
-    'passport': os.getenv('PASSPORT_SERVICE_URL', 'http://passport-service:8000'),
-    'locker': os.getenv('LOCKER_SERVICE_URL', 'http://locker-service:8000'),
-    'registry': os.getenv('REGISTRY_SERVICE_URL', 'http://registry-service:8000'),
-    'billing': os.getenv('BILLING_SERVICE_URL', 'http://billing-service:8000'),
-    'compliance': os.getenv('COMPLIANCE_SERVICE_URL', 'http://compliance-service:8000'),
+    'auth': os.getenv('AUTH_URL', 'http://auth-service:8000'),
+    'tenant': os.getenv('TENANT_URL', 'http://tenant-service:8000'),
+    'focus': os.getenv('FOCUS_URL', 'http://focus-service:8000'),
+    'wellness': os.getenv('WELLNESS_URL', 'http://wellness-service:8000'),
+    'passport': os.getenv('PASSPORT_URL', 'http://passport-service:8000'),
+    'locker': os.getenv('LOCKER_URL', 'http://locker-service:8000'),
+    'registry': os.getenv('REGISTRY_URL', 'http://registry-service:8000'),
+    'billing': os.getenv('BILLING_URL', 'http://billing-service:8000'),
+    'compliance': os.getenv('COMPLIANCE_URL', 'http://compliance-service:8000'),
 }
+
 
 
 def _html_page(title: str, body: str, status: int = 200) -> Response:
@@ -62,6 +65,7 @@ def index():
             <p>Questa versione microservizi espone un <strong>API Gateway</strong>. Non è la dashboard monolitica grafica: le UI complete sono nella cartella <code>legacy_alpha_monolith</code> oppure nei singoli frontend da collegare ai servizi.</p>
             <div class="d-flex gap-2 flex-wrap">
               <a class="btn btn-primary" href="/health">Verifica health</a>
+              <a class="btn btn-light" href="/app">Apri webapp grafica</a>
               <a class="btn btn-outline-primary" href="/docs">Documentazione deploy</a>
             </div>
           </div>
@@ -161,6 +165,20 @@ def proxy(service, path):
         return (response.content, response.status_code, headers)
     except requests.RequestException as exc:
         return jsonify({'error': 'service_unreachable', 'service': service, 'url': url, 'detail': str(exc)}), 502
+
+
+@app.get('/app')
+def open_frontend():
+    return redirect(os.getenv('FRONTEND_PUBLIC_URL', FRONTEND_URL))
+
+@app.get('/frontend/health')
+def frontend_health():
+    url = f"{FRONTEND_URL.rstrip('/')}/login"
+    try:
+        r = requests.get(url, timeout=5)
+        return jsonify({'frontend': 'ok' if r.status_code == 200 else 'degraded', 'url': url, 'status_code': r.status_code}), (200 if r.status_code == 200 else 503)
+    except requests.RequestException as exc:
+        return jsonify({'frontend': 'unreachable', 'url': url, 'error': str(exc)}), 503
 
 
 @app.errorhandler(404)

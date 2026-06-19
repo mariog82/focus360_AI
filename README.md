@@ -78,3 +78,34 @@ Se vuoi controllare un servizio singolo:
 - Locker: `http://localhost:8008/health`
 - Registry: `http://localhost:8009/health`
 
+
+## Frontend-Service Bootstrap collegato al Gateway
+
+Questa build integra il monolite `legacy_alpha_monolith` come `frontend-service`, pensato per demo commerciali e scuole pilota.
+
+### Avvio locale completo
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+```
+
+URL:
+- Gateway: http://localhost:8080
+- Frontend webapp: http://localhost:8090
+- Stato servizi: http://localhost:8080/health/services
+- Stato Gateway dal frontend: http://localhost:8090/system-status
+
+### Deploy Render multi-servizio
+Creare un ulteriore Web Service Render:
+- Name: `focus360-frontend-service`
+- Root Directory: `frontend-service`
+- Environment: Docker
+- Dockerfile Path: `Dockerfile`
+- Env `GATEWAY_URL`: URL del gateway Render
+
+Nel Gateway impostare anche:
+```env
+FRONTEND_URL=https://focus360-frontend-service.onrender.com
+FRONTEND_PUBLIC_URL=https://focus360-frontend-service.onrender.com
+```

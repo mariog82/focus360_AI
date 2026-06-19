@@ -189,6 +189,34 @@ services:
       - focus360-net
     healthcheck: *service-healthcheck
 
+
+  frontend-service:
+    build:
+      context: ./frontend-service
+      dockerfile: Dockerfile
+    container_name: focus360-frontend-service
+    ports:
+      - "8090:8000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-focus360-dev-secret-change-me}
+      DATABASE_URL: sqlite:////data/focus360_ai.db
+      GATEWAY_URL: http://gateway:8080
+      FRONTEND_MODE: frontend-service
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - focus360_data:/data
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - focus360-net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/login', timeout=3).status==200 else 1)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   focus360_data:
 
