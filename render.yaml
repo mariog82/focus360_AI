@@ -1,16 +1,83 @@
 services:
   - type: web
-    name: focus360-ai-alpha-gateway
-    env: python
-    plan: starter
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    name: focus360-gateway
+    env: docker
+    dockerfilePath: ./Dockerfile.gateway
+    healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.8
       - key: SECRET_KEY
         generateValue: true
       - key: INTERNAL_API_KEY
         generateValue: true
-      - key: DATABASE_URL
-        value: sqlite:////tmp/focus360_micro.db
+      - key: AUTH_URL
+        value: https://focus360-auth-service.onrender.com
+      - key: TENANT_URL
+        value: https://focus360-tenant-service.onrender.com
+      - key: FOCUS_URL
+        value: https://focus360-focus-service.onrender.com
+      - key: WELLNESS_URL
+        value: https://focus360-wellness-service.onrender.com
+      - key: PASSPORT_URL
+        value: https://focus360-passport-service.onrender.com
+      - key: BILLING_URL
+        value: https://focus360-billing-service.onrender.com
+      - key: COMPLIANCE_URL
+        value: https://focus360-compliance-service.onrender.com
+      - key: LOCKER_URL
+        value: https://focus360-locker-service.onrender.com
+      - key: REGISTRY_URL
+        value: https://focus360-registry-service.onrender.com
+
+  - type: web
+    name: focus360-auth-service
+    env: docker
+    dockerfilePath: ./Dockerfile.auth_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-tenant-service
+    env: docker
+    dockerfilePath: ./Dockerfile.tenant_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-focus-service
+    env: docker
+    dockerfilePath: ./Dockerfile.focus_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-wellness-service
+    env: docker
+    dockerfilePath: ./Dockerfile.wellness_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-passport-service
+    env: docker
+    dockerfilePath: ./Dockerfile.passport_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-billing-service
+    env: docker
+    dockerfilePath: ./Dockerfile.billing_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-compliance-service
+    env: docker
+    dockerfilePath: ./Dockerfile.compliance_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-locker-service
+    env: docker
+    dockerfilePath: ./Dockerfile.locker_service
+    healthCheckPath: /health
+
+  - type: web
+    name: focus360-registry-service
+    env: docker
+    dockerfilePath: ./Dockerfile.registry_service
+    healthCheckPath: /health
