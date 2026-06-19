@@ -78,8 +78,3 @@ Se vuoi controllare un servizio singolo:
 - Locker: `http://localhost:8008/health`
 - Registry: `http://localhost:8009/health`
 
-
-
-## Fix PostgreSQL driver
-
-Questa versione aggiunge `psycopg2-binary==2.9.9` per consentire ai microservizi Flask/SQLAlchemy di collegarsi a PostgreSQL su Render tramite `DATABASE_URL`.
