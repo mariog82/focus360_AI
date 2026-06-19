@@ -5,15 +5,15 @@ import requests
 app = Flask(__name__)
 
 SERVICES = {
-    'auth': os.getenv('AUTH_URL', 'http://auth-service:8000'),
-    'tenant': os.getenv('TENANT_URL', 'http://tenant-service:8000'),
-    'focus': os.getenv('FOCUS_URL', 'http://focus-service:8000'),
-    'wellness': os.getenv('WELLNESS_URL', 'http://wellness-service:8000'),
-    'passport': os.getenv('PASSPORT_URL', 'http://passport-service:8000'),
-    'locker': os.getenv('LOCKER_URL', 'http://locker-service:8000'),
-    'registry': os.getenv('REGISTRY_URL', 'http://registry-service:8000'),
-    'billing': os.getenv('BILLING_URL', 'http://billing-service:8000'),
-    'compliance': os.getenv('COMPLIANCE_URL', 'http://compliance-service:8000'),
+    'auth': os.getenv('AUTH_SERVICE_URL', 'http://auth-service:8000'),
+    'tenant': os.getenv('TENANT_SERVICE_URL', 'http://tenant-service:8000'),
+    'focus': os.getenv('FOCUS_SERVICE_URL', 'http://focus-service:8000'),
+    'wellness': os.getenv('WELLNESS_SERVICE_URL', 'http://wellness-service:8000'),
+    'passport': os.getenv('PASSPORT_SERVICE_URL', 'http://passport-service:8000'),
+    'locker': os.getenv('LOCKER_SERVICE_URL', 'http://locker-service:8000'),
+    'registry': os.getenv('REGISTRY_SERVICE_URL', 'http://registry-service:8000'),
+    'billing': os.getenv('BILLING_SERVICE_URL', 'http://billing-service:8000'),
+    'compliance': os.getenv('COMPLIANCE_SERVICE_URL', 'http://compliance-service:8000'),
 }
 
 
