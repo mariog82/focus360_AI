@@ -142,10 +142,11 @@ services:
 
   gateway:
     build:
-      context: .
-      dockerfile: gateway/Dockerfile
+      context: ./gateway
+      dockerfile: Dockerfile
     container_name: focus360-gateway
-    ports: ["8080:8080"]
+    command: gunicorn app:app --bind 0.0.0.0:8000
+    ports: ["8080:8000"]
     environment:
       <<: *common-env
       DATABASE_URL: sqlite:////data/gateway.db
@@ -172,7 +173,7 @@ services:
     networks: [focus360-net]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).status==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status==200 else 1)\""]
       interval: 20s
       timeout: 8s
       retries: 10
@@ -187,7 +188,7 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY:-focus360-dev-secret-change-me}
       DATABASE_URL: sqlite:////data/frontend_focus360_ai.db
-      GATEWAY_URL: http://gateway:8080
+      GATEWAY_URL: http://gateway:8000
       FRONTEND_MODE: frontend-service
       PYTHONUNBUFFERED: "1"
       GUNICORN_CMD_ARGS: "--timeout 120 --workers 1 --access-logfile - --error-logfile -"
