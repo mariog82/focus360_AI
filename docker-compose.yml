@@ -66,7 +66,7 @@ services:
   auth-service:
     build:
       context: .
-      dockerfile: services/auth_service/Dockerfile
+      dockerfile: Dockerfile.auth_service
     container_name: focus360-auth-service
     ports:
       - "8001:8000"
@@ -80,7 +80,7 @@ services:
   tenant-service:
     build:
       context: .
-      dockerfile: services/tenant_service/Dockerfile
+      dockerfile: Dockerfile.tenant_service
     container_name: focus360-tenant-service
     ports:
       - "8002:8000"
@@ -94,7 +94,7 @@ services:
   focus-service:
     build:
       context: .
-      dockerfile: services/focus_service/Dockerfile
+      dockerfile: Dockerfile.focus_service
     container_name: focus360-focus-service
     ports:
       - "8003:8000"
@@ -108,7 +108,7 @@ services:
   wellness-service:
     build:
       context: .
-      dockerfile: services/wellness_service/Dockerfile
+      dockerfile: Dockerfile.wellness_service
     container_name: focus360-wellness-service
     ports:
       - "8004:8000"
@@ -122,7 +122,7 @@ services:
   passport-service:
     build:
       context: .
-      dockerfile: services/passport_service/Dockerfile
+      dockerfile: Dockerfile.passport_service
     container_name: focus360-passport-service
     ports:
       - "8005:8000"
@@ -136,7 +136,7 @@ services:
   billing-service:
     build:
       context: .
-      dockerfile: services/billing_service/Dockerfile
+      dockerfile: Dockerfile.billing_service
     container_name: focus360-billing-service
     ports:
       - "8006:8000"
@@ -150,7 +150,7 @@ services:
   compliance-service:
     build:
       context: .
-      dockerfile: services/compliance_service/Dockerfile
+      dockerfile: Dockerfile.compliance_service
     container_name: focus360-compliance-service
     ports:
       - "8007:8000"
@@ -164,7 +164,7 @@ services:
   locker-service:
     build:
       context: .
-      dockerfile: services/locker_service/Dockerfile
+      dockerfile: Dockerfile.locker_service
     container_name: focus360-locker-service
     ports:
       - "8008:8000"
@@ -178,7 +178,7 @@ services:
   registry-service:
     build:
       context: .
-      dockerfile: services/registry_service/Dockerfile
+      dockerfile: Dockerfile.registry_service
     container_name: focus360-registry-service
     ports:
       - "8009:8000"

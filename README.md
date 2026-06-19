@@ -1,3 +1,7 @@
+# Focus360 AI Frontend Service + Gateway - Compose Fix
+
+Versione corretta per avvio locale con Docker Compose. Vedi `COMPOSE_FRONTEND_FIX.md`.
+
 
 # Focus360 AI Enterprise Alpha - Microservices SaaS DevSecOps
 
